@@ -97,6 +97,9 @@ _STATE_DEFAULTS: dict[str, Any] = {
     "cover_image_style": None,
     "cover_image_error": None,
     "cover_prompt": None,
+
+    # MOTD
+    "motd_seen_signature": None,
 }
 
 

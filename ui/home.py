@@ -1,7 +1,7 @@
 """Home screen for selecting the app mode."""
 from __future__ import annotations
 
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import streamlit as st
 
@@ -15,6 +15,7 @@ def render_home_screen(
     auth_user: Mapping[str, object] | None,
     use_remote_exports: bool,
     story_types: Sequence[Mapping[str, object]],
+    motd: Mapping[str, Any] | None = None,
 ) -> None:
     st.subheader("어떤 작업을 하시겠어요?")
     try:

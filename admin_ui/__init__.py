@@ -1,12 +1,12 @@
 """Submodules for the admin Streamlit app."""
 
-from . import common, dashboard, explorer, moderation, exports
+from . import announcements, common, dashboard, explorer, moderation, exports
 
 __all__ = [
+    "announcements",
     "common",
     "dashboard",
     "explorer",
     "moderation",
     "exports",
 ]
-

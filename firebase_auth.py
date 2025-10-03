@@ -246,11 +246,19 @@ def _ensure_firebase_admin_initialized() -> firebase_admin.App:
     return firebase_admin.initialize_app(cred, options or None)
 
 
-def verify_id_token(id_token: str, *, check_revoked: bool = False) -> Mapping[str, Any]:
+def verify_id_token(
+    id_token: str,
+    *,
+    check_revoked: bool = False,
+    clock_skew_seconds: int | None = None,
+) -> Mapping[str, Any]:
     """Verify an ID token using firebase_admin, returning the decoded claims."""
 
     _ensure_firebase_admin_initialized()
-    return admin_auth.verify_id_token(id_token, check_revoked=check_revoked)
+    kwargs: dict[str, Any] = {"check_revoked": check_revoked}
+    if clock_skew_seconds is not None:
+        kwargs["clock_skew_seconds"] = clock_skew_seconds
+    return admin_auth.verify_id_token(id_token, **kwargs)
 
 
 def ensure_firebase_admin_initialized() -> firebase_admin.App:

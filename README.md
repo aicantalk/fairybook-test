@@ -10,6 +10,7 @@ Fairybook is a Streamlit application that helps educators and parents craft shor
 - HTML exports: bundle the title, cover, stage illustrations, and prose into timestamped HTML files stored under `html_exports/`.
 - Saved story browser: revisit previous exports inside the app without leaving Streamlit, with a dedicated **내 동화** view for logged-in users.
 - Temporary community board: leave quick notes for fellow writers; implemented in an isolated `community_board.py` module so it can be removed or swapped independently.
+- Message of the day announcements: show a first-visit modal and persistent banners driven by an admin-configurable notice, ensuring every visitor sees critical updates.
 - Firebase email/password login: authenticate writers before they can create new stories or post on the board, while keeping the saved-story viewer public.
 
 ## Getting Started
@@ -36,6 +37,7 @@ pip install -r requirements.txt
    ```
 3. Restart the Streamlit app after changing `.env` so the new values load.
 4. Keep `.env` out of version control; only `.env.sample` should be committed.
+5. (Optional) Adjust MOTD storage with `FIRESTORE_MOTD_COLLECTION` / `FIRESTORE_MOTD_DOCUMENT` if you need a custom Firestore location; when `STORY_STORAGE_MODE=local`, the notice is saved to `motd.json` in the repo root instead.
 
 ### Streamlit Cloud Secrets
 If `google-credential.json` is unavailable (for example on Streamlit Cloud), add the service-account payload to `.streamlit/secrets.toml` instead:
@@ -92,6 +94,7 @@ streamlit run admin_app.py --server.headless true
 
 - Authenticate with a Firebase account that has the custom claim `role=admin`. Non-admin accounts are rejected.
 - The console exposes a usage dashboard, activity explorer, CSV/Google Sheets export tools, and user moderation controls (disable, role update, sanction logging).
+- The **공지 관리** tab lets you compose, preview, activate, or disable the global MOTD; the notice appears as a first-visit modal and as banners on the home screen and community board.
 - Google Sheets exports require the service-account credentials used elsewhere plus edit access to the target spreadsheet. Set the spreadsheet ID in the UI when exporting.
 - Activity statistics rely on Firestore logging. If logging is disabled (`ACTIVITY_LOG_ENABLED=false`), the console surfaces a warning and some charts may be empty.
 - Helper scripts under `scripts/` assist with admin management:
@@ -116,9 +119,11 @@ The suites under `tests/` mock external services (Gemini, Firebase, and GCS) so 
 - `services/story_service.py` – `StoryBundle`/`StagePayload` dataclasses plus HTML export and optional GCS upload helpers.
 - `telemetry.py` – Thin wrapper around the Firestore activity log with sensible defaults for user attribution.
 - `admin_app.py` – Standalone Streamlit entry point for administrators (analytics, moderation, exports). Supporting modules live under `admin_tool/`.
+- `admin_ui/announcements.py` – Admin console surface for composing and toggling the message of the day.
 - `community_board.py` – SQLite/Firestore dual backend for the experimental collaboration board.
 - `firebase_auth.py` – REST + Firebase Admin helpers for email/password sign-up, sign-in, token refresh, and server-side verification.
 - `gemini_client.py` – Gemini integration, including story prompt composition, synopsis/protagonist prompt builders, illustration prompt generation, and image model fallbacks.
+- `motd_store.py` – Shared MOTD storage helpers (Firestore or local JSON fallback).
 - `storytype.json`, `story.json`, `ending.json` – Data assets that describe story archetypes, reusable beats, and ending templates.
 - `illust_styles.json` – Illustration style catalog used to randomize art direction.
 - `illust/` – Lightweight 512×512 thumbnail PNGs showcased in the UI.

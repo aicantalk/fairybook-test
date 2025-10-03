@@ -45,6 +45,7 @@ from utils.auth import (
 )
 from utils.network import get_client_ip
 from utils.time_utils import format_kst
+from motd_store import get_motd
 
 st.set_page_config(page_title="동화책 생성기", page_icon="📖", layout="centered")
 
@@ -160,6 +161,66 @@ auth_user = ensure_active_auth_session()
 mode = st.session_state.get("mode")
 current_step = st.session_state["step"]
 
+motd_record = get_motd()
+active_motd: dict[str, Any] | None = None
+if motd_record and motd_record.is_active and motd_record.message.strip():
+    active_motd = {
+        "message": motd_record.message,
+        "signature": motd_record.signature,
+        "updated_at": motd_record.updated_at,
+        "updated_at_kst": format_kst(motd_record.updated_at),
+        "updated_by": motd_record.updated_by,
+    }
+
+if active_motd and mode != "auth":
+    prior_signature = st.session_state.get("motd_seen_signature")
+    if prior_signature != active_motd["signature"] and mode == "board":
+        # 대시보드/게시판 등 로그인 이후에도 공지를 강제로 보여주지 않도록 signature를 기록해둔다.
+        st.session_state["motd_seen_signature"] = active_motd["signature"]
+
+    if st.session_state.get("motd_seen_signature") != active_motd["signature"]:
+        meta_parts: list[str] = []
+        if active_motd.get("updated_at_kst"):
+            meta_parts.append(f"업데이트: {active_motd['updated_at_kst']}")
+        if active_motd.get("updated_by"):
+            meta_parts.append(f"작성자: {active_motd['updated_by']}")
+
+        def _render_motd_content() -> None:
+            st.markdown(active_motd["message"])
+            if meta_parts:
+                st.caption(" · ".join(meta_parts))
+
+        def _acknowledge() -> None:
+            st.session_state["motd_seen_signature"] = active_motd["signature"]
+            st.rerun()
+
+        if hasattr(st, "modal"):
+            with st.modal("📢 공지사항", key="motd_modal"):
+                _render_motd_content()
+                if st.button("확인했어요", use_container_width=True, key="motd_ack_modal"):
+                    _acknowledge()
+        elif hasattr(st, "experimental_dialog"):
+            @st.experimental_dialog("📢 공지사항")
+            def _motd_dialog() -> None:
+                _render_motd_content()
+                if st.button("확인했어요", use_container_width=True, key="motd_ack_experimental"):
+                    _acknowledge()
+
+            _motd_dialog()
+        elif hasattr(st, "dialog"):
+            @st.dialog("📢 공지사항")
+            def _motd_dialog() -> None:
+                _render_motd_content()
+                if st.button("확인했어요", use_container_width=True, key="motd_ack_dialog"):
+                    _acknowledge()
+
+            _motd_dialog()
+        else:
+            st.info(active_motd["message"])
+            if meta_parts:
+                st.caption(" · ".join(meta_parts))
+            st.session_state["motd_seen_signature"] = active_motd["signature"]
+
 if mode in {"create", "board", "settings"} and not auth_user:
     st.session_state["auth_next_action"] = mode
     st.session_state["mode"] = "auth"
@@ -230,7 +291,7 @@ else:
     progress_placeholder.empty()
 
 if mode == "board":
-    render_board_page(home_bg, auth_user=auth_user)
+    render_board_page(home_bg, auth_user=auth_user, motd=active_motd)
     st.stop()
 
 if mode == "settings":
@@ -256,6 +317,7 @@ if current_step == 0:
         auth_user=auth_user,
         use_remote_exports=USE_REMOTE_EXPORTS,
         story_types=story_types,
+        motd=active_motd,
     )
 elif mode == "create" and current_step in {1, 2, 3, 4, 5, 6}:
     render_current_step(create_context, current_step)

@@ -30,7 +30,7 @@ from admin_tool.auth import (
 from firebase_auth import FirebaseAuthError, sign_in, verify_id_token
 from utils.network import get_client_ip
 
-from admin_ui import dashboard, explorer, moderation, exports
+from admin_ui import announcements, dashboard, explorer, moderation, exports
 
 
 st.set_page_config(page_title="운영자 콘솔", page_icon="🛡️", layout="wide")
@@ -135,13 +135,13 @@ def _render_login() -> None:
         return
 
     try:
-        claims = verify_id_token(session.id_token)
+        claims = verify_id_token(session.id_token, clock_skew_seconds=60)
     except Exception as exc:  # pragma: no cover - verification failure
         message = str(exc)
         if "Token used too early" in message:
             time.sleep(2)
             try:
-                claims = verify_id_token(session.id_token)
+                claims = verify_id_token(session.id_token, clock_skew_seconds=60)
             except Exception as retry_exc:  # pragma: no cover - second failure
                 st.error(f"ID 토큰을 검증하는 중 오류가 발생했습니다: {retry_exc}")
                 _log_admin_event(
@@ -205,6 +205,7 @@ def _sidebar(admin_user: Mapping[str, Any]) -> str:
                 "대시보드",
                 "사용자 디렉터리",
                 "활동 탐색기",
+                "공지 관리",
                 "내보내기",
             ),
             key=NAV_KEY,
@@ -235,7 +236,7 @@ def _resolve_admin_session() -> tuple[Mapping[str, Any] | None, Mapping | None]:
     claims = st.session_state.get("admin_claims")
     if not isinstance(claims, Mapping):
         try:
-            claims = verify_id_token(str(session_state.get("id_token")))
+            claims = verify_id_token(str(session_state.get("id_token")), clock_skew_seconds=60)
         except Exception:  # pragma: no cover
             claims = {}
         st.session_state["admin_claims"] = claims
@@ -262,6 +263,13 @@ def main() -> None:
         )
     elif section == "활동 탐색기":
         explorer.render_activity_explorer(admin_session, _trigger_rerun)
+    elif section == "공지 관리":
+        announcements.render_announcements(
+            admin_session,
+            log_admin_event=_log_admin_event,
+            trigger_rerun=_trigger_rerun,
+            admin_email_lookup=admin_email,
+        )
     else:
         exports.render_exports(
             admin_session,

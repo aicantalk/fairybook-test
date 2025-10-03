@@ -1,7 +1,7 @@
 """Community board UI separated from the main Streamlit app."""
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Any, Mapping
 
 import streamlit as st
 
@@ -15,7 +15,12 @@ from utils.time_utils import format_kst
 BOARD_POST_LIMIT = 50
 
 
-def render_board_page(home_bg: str | None, *, auth_user: Mapping[str, object]) -> None:
+def render_board_page(
+    home_bg: str | None,
+    *,
+    auth_user: Mapping[str, object],
+    motd: Mapping[str, Any] | None = None,
+) -> None:
     """Render the lightweight community board view."""
     init_board_store()
     render_app_styles(home_bg, show_home_hero=False)
@@ -33,6 +38,19 @@ def render_board_page(home_bg: str | None, *, auth_user: Mapping[str, object]) -
 
     st.subheader("💬 동화 작업실 게시판")
     st.caption("동화를 만드는 분들끼리 짧은 메모를 나누는 공간이에요. 친절한 응원과 진행 상황을 가볍게 남겨보세요.")
+
+    if motd and motd.get("message"):
+        with st.container():
+            st.markdown("#### 📢 오늘의 공지")
+            st.info(motd["message"])
+            meta_bits: list[str] = []
+            if motd.get("updated_at_kst"):
+                meta_bits.append(f"업데이트: {motd['updated_at_kst']}")
+            if motd.get("updated_by"):
+                meta_bits.append(f"작성자: {motd['updated_by']}")
+            if meta_bits:
+                st.caption(" · ".join(meta_bits))
+        st.divider()
 
     default_alias = st.session_state.get("board_user_alias") or auth_display_name(auth_user)
     st.session_state.setdefault("board_user_alias", default_alias)
