@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping
 import streamlit as st
 
 from admin_tool.constants import MODERATION_REASON_CODES, SANCTION_DURATION_PRESETS
+from admin_tool.generation_tokens import fetch_user_tokens, refill_user_tokens, set_user_tokens
 from admin_tool.user_service import (
     AdminUser,
     apply_user_sanction,
@@ -15,6 +16,8 @@ from admin_tool.user_service import (
     set_user_role,
 )
 from firebase_auth import FirebaseAuthError
+from services.generation_tokens import DEFAULT_AUTO_CAP
+from utils.time_utils import format_kst
 
 
 def _render_user_card(
@@ -32,6 +35,85 @@ def _render_user_card(
         cols[1].write(f"상태: {'비활성화' if user.disabled else '활성'}")
         cols[2].write(f"역할: {user.role or '미지정'}")
         cols[3].write(f"최근 로그인: {user.last_sign_in.isoformat() if user.last_sign_in else '—'}")
+
+        st.markdown("#### 생성 토큰")
+        token_status = None
+        try:
+            token_status = fetch_user_tokens(user.uid)
+        except Exception as exc:  # noqa: BLE001
+            st.warning(f"토큰 정보를 가져오지 못했어요: {exc}")
+        else:
+            if token_status:
+                caption = f"현재 {token_status.tokens}개 / 자동 충전 한도 {token_status.auto_cap}개"
+                if token_status.last_refill_at:
+                    caption += f" · 최근 자동 충전 {format_kst(token_status.last_refill_at)}"
+                if token_status.last_consumed_at:
+                    caption += f" · 마지막 사용 {format_kst(token_status.last_consumed_at)}"
+                st.caption(caption)
+            else:
+                st.caption("토큰 정보가 아직 없습니다. 최초 로그인 시 자동으로 생성됩니다.")
+
+        token_cols = st.columns((1, 2))
+        if token_cols[0].button("자동 리필", key=f"token-refill-{user.uid}"):
+            try:
+                updated_tokens = refill_user_tokens(user.uid)
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"토큰을 리필하지 못했어요: {exc}")
+            else:
+                identifier = admin_email_lookup(administrator)
+                log_admin_event(
+                    "token refill",
+                    "success",
+                    admin_identifier=identifier,
+                    params=[user.uid, str(updated_tokens.tokens), str(updated_tokens.auto_cap), None, None],
+                )
+                st.success("자동 충전 한도까지 토큰을 채웠어요.")
+                trigger_rerun()
+
+        with token_cols[1].form(f"token-set-form-{user.uid}"):
+            current_tokens = token_status.tokens if token_status else 0
+            current_cap = token_status.auto_cap if token_status else DEFAULT_AUTO_CAP
+            desired_tokens = st.number_input(
+                "토큰 수량",
+                min_value=0,
+                value=int(current_tokens),
+                step=1,
+                format="%d",
+            )
+            desired_cap = st.number_input(
+                "자동 충전 한도",
+                min_value=0,
+                value=int(current_cap),
+                step=1,
+                format="%d",
+            )
+            set_submitted = st.form_submit_button("토큰 정보 저장")
+
+        if set_submitted:
+            try:
+                updated_tokens = set_user_tokens(
+                    user.uid,
+                    tokens=int(desired_tokens),
+                    auto_cap=int(desired_cap),
+                )
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"토큰 정보를 업데이트하지 못했어요: {exc}")
+            else:
+                identifier = admin_email_lookup(administrator)
+                log_admin_event(
+                    "token set",
+                    "success",
+                    admin_identifier=identifier,
+                    params=[
+                        user.uid,
+                        str(updated_tokens.tokens),
+                        str(updated_tokens.auto_cap),
+                        None,
+                        None,
+                    ],
+                )
+                st.success("토큰 정보를 업데이트했어요.")
+                trigger_rerun()
 
         action_cols = st.columns(3)
         toggle_label = "재활성화" if user.disabled else "사용 중지"

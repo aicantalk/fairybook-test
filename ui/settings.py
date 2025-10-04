@@ -1,11 +1,13 @@
 """Account settings view for updating user profile details."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Mapping
 
 import streamlit as st
 
 from firebase_auth import delete_account, update_password, update_profile
+from services.generation_tokens import sync_on_login, status_from_mapping, status_to_dict
 from telemetry import emit_log_event
 from ui.styles import render_app_styles
 from utils.auth import (
@@ -16,6 +18,7 @@ from utils.auth import (
     store_auth_session,
 )
 from utils.network import get_client_ip
+from utils.time_utils import format_kst
 from session_state import reset_all_state
 
 
@@ -51,6 +54,46 @@ def render_account_settings(home_bg: str | None, *, auth_user: Mapping[str, obje
     if not id_token:
         st.error("계정 토큰을 찾지 못했습니다. 다시 로그인해 주세요.")
         return
+
+    uid = str(auth_user.get("uid") or "")
+
+    st.markdown("### 생성 토큰")
+    token_status = status_from_mapping(st.session_state.get("generation_token_status"))
+    token_error = st.session_state.get("generation_token_error")
+
+    if token_error:
+        st.warning(f"토큰 정보를 불러오지 못했어요: {token_error}")
+    elif token_status:
+        summary = f"남은 생성 토큰: **{token_status.tokens}개** / 자동 충전 한도 {token_status.auto_cap}개"
+        if token_status.last_refill_at:
+            summary += f" · 최근 자동 충전: {format_kst(token_status.last_refill_at)}"
+        if token_status.last_consumed_at:
+            summary += f" · 마지막 사용: {format_kst(token_status.last_consumed_at)}"
+        st.caption(summary)
+    else:
+        st.caption("토큰 정보를 불러오는 중이에요.")
+
+    if st.button("🔄 토큰 새로고침", use_container_width=True, key="settings_refresh_tokens"):
+        if not uid:
+            st.warning("사용자 정보를 확인할 수 없습니다. 다시 로그인해 주세요.")
+        else:
+            try:
+                refresh_result = sync_on_login(uid=uid)
+            except Exception as exc:  # noqa: BLE001
+                message = f"토큰 정보를 새로고침하지 못했어요: {exc}"
+                st.error(message)
+                st.session_state["generation_token_error"] = message
+            else:
+                refreshed_payload = status_to_dict(refresh_result.status)
+                st.session_state["generation_token_status"] = refreshed_payload
+                st.session_state["generation_token_error"] = None
+                st.session_state["generation_token_synced_at"] = datetime.now(timezone.utc).isoformat()
+                st.session_state["generation_token_uid"] = uid
+                st.session_state["generation_token_refill_delta"] = refresh_result.refilled_by
+                token_status = refresh_result.status
+                st.success("토큰 정보를 새로고침했어요.")
+
+    st.markdown("---")
 
     client_ip = get_client_ip()
 

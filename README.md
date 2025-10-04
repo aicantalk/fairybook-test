@@ -9,6 +9,7 @@ Fairybook is a Streamlit application that helps educators and parents craft shor
 - Consistent illustration style: the initial generation locks a single art direction and reuses it for character art, stage visuals, and the cover.
 - HTML exports: bundle the title, cover, stage illustrations, and prose into timestamped HTML files stored under `html_exports/`.
 - Saved story browser: revisit previous exports inside the app without leaving Streamlit, with a dedicated **내 동화** view for logged-in users.
+- Daily generation tokens: authenticated users receive seven tokens at signup, gain one per KST midnight (up to ten), and spend a token the first time a finished story is saved in Step 6.
 - Temporary community board: leave quick notes for fellow writers; implemented in an isolated `community_board.py` module so it can be removed or swapped independently.
 - Message of the day announcements: show a first-visit modal and persistent banners driven by an admin-configurable notice, ensuring every visitor sees critical updates.
 - Firebase email/password login: authenticate writers before they can create new stories or post on the board, while keeping the saved-story viewer public.
@@ -82,6 +83,13 @@ The UI opens to a task selector. Choose **✏️ 동화 만들기** to start the
 4. Pick one of four narrative cards drawn from `story.json` (the final stage automatically swaps in `ending.json` cards so the conclusion matches the desired mood).
 5. Let Gemini write the current stage with continuity context and create its illustration (optionally guided by the character art as an image reference); repeat until all five stages are complete.
 6. Open **전체 이야기를 모아봤어요** to review the full sequence. The app auto-saves an HTML bundle under `html_exports/` and surfaces the latest file path. Use **📖 동화책 읽기** any time to browse previously exported stories.
+
+### Generation Tokens
+- New accounts start with seven generation tokens; the balance increases by one each KST midnight (capped at ten).
+- The **✨ 제목 만들기** button is disabled once the balance hits zero. Redirects to the auth gate preserve the intended action so users can log in and continue seamlessly.
+- Step 6 consumes a single token the first time a finished story is saved. Users can rerun earlier steps without additional cost so long as they do not generate an export.
+- The account settings page shows the live balance, last refill/consumption times, and offers a manual refresh. These values mirror the token data stored in Firestore under the user's UID.
+- Admins can inspect and adjust balances inside **👥 사용자 디렉터리** via the new token controls (auto-refill to the cap or set custom values).
 
 ### Admin Console
 Operations staff can launch a dedicated Streamlit console for user management, log analytics, and exports:

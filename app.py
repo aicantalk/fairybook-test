@@ -16,6 +16,12 @@ from activity_log import init_activity_log
 from app_constants import STORY_PHASES
 from gcs_storage import download_gcs_export, is_gcs_available, list_gcs_exports
 from services.story_service import HTML_EXPORT_PATH, export_story_to_html, list_html_exports
+from services.generation_tokens import (
+    GenerationTokenStatus,
+    sync_on_login,
+    status_from_mapping,
+    status_to_dict,
+)
 from session_state import (
     clear_stages_from,
     ensure_state,
@@ -70,6 +76,58 @@ except Exception as exc:  # pragma: no cover - initialization failure surfaced l
     STORY_LIBRARY_INIT_ERROR = str(exc)
 
 init_activity_log()
+
+
+def _clear_generation_token_state() -> None:
+    st.session_state["generation_token_status"] = None
+    st.session_state["generation_token_error"] = None
+    st.session_state["generation_token_synced_at"] = None
+    st.session_state["generation_token_uid"] = None
+    st.session_state["generation_token_refill_delta"] = 0
+
+
+def _store_generation_token_state(
+    *,
+    uid: str,
+    status: GenerationTokenStatus,
+    refilled_by: int,
+) -> None:
+    st.session_state["generation_token_status"] = status_to_dict(status)
+    st.session_state["generation_token_uid"] = uid
+    st.session_state["generation_token_synced_at"] = datetime.now(timezone.utc).isoformat()
+    st.session_state["generation_token_refill_delta"] = refilled_by
+    st.session_state["generation_token_error"] = None
+
+
+def _current_generation_token_status() -> GenerationTokenStatus | None:
+    raw_status = st.session_state.get("generation_token_status")
+    return status_from_mapping(raw_status)
+
+
+def _maybe_sync_generation_tokens(auth_user: Mapping[str, Any] | None) -> None:
+    if not auth_user:
+        _clear_generation_token_state()
+        return
+
+    uid = str(auth_user.get("uid") or "").strip()
+    if not uid:
+        _clear_generation_token_state()
+        return
+
+    cached_uid = st.session_state.get("generation_token_uid")
+    if cached_uid != uid:
+        _clear_generation_token_state()
+
+    if st.session_state.get("generation_token_status") is not None:
+        return
+
+    try:
+        sync_result = sync_on_login(uid=uid)
+    except Exception as exc:  # noqa: BLE001
+        st.session_state["generation_token_error"] = str(exc)
+        return
+
+    _store_generation_token_state(uid=uid, status=sync_result.status, refilled_by=sync_result.refilled_by)
 
 
 def _load_json_entries_from_file(path: str | Path, key: str) -> list[dict]:
@@ -145,6 +203,7 @@ def logout_user() -> None:
     st.session_state["board_user_alias"] = None
     st.session_state["board_content"] = ""
     st.session_state["auth_next_action"] = None
+    _clear_generation_token_state()
     emit_log_event(
         type="user",
         action="logout",
@@ -158,6 +217,7 @@ def logout_user() -> None:
 # ─────────────────────────────────────────────────────────────────────
 home_bg = load_image_as_base64(str(HOME_BACKGROUND_IMAGE_PATH))
 auth_user = ensure_active_auth_session()
+_maybe_sync_generation_tokens(auth_user)
 mode = st.session_state.get("mode")
 current_step = st.session_state["step"]
 
@@ -310,6 +370,8 @@ create_context = CreatePageContext(
     auth_user=auth_user,
     home_background=home_bg,
     illust_dir=ILLUST_DIR,
+    generation_tokens=st.session_state.get("generation_token_status"),
+    generation_token_error=st.session_state.get("generation_token_error"),
 )
 
 if current_step == 0:
@@ -318,6 +380,8 @@ if current_step == 0:
         use_remote_exports=USE_REMOTE_EXPORTS,
         story_types=story_types,
         motd=active_motd,
+        generation_tokens=st.session_state.get("generation_token_status"),
+        generation_token_error=st.session_state.get("generation_token_error"),
     )
 elif mode == "create" and current_step in {1, 2, 3, 4, 5, 6}:
     render_current_step(create_context, current_step)

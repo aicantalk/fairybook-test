@@ -6,12 +6,15 @@ import streamlit as st
 from session_state import clear_stages_from, reset_cover_art, reset_story_session
 
 from .context import CreatePageContext
+from .tokens import render_token_status
 
 
 def render_step(context: CreatePageContext) -> None:
     session = context.session
 
     st.subheader("1단계. 나이대와 이야기 아이디어를 입력하세요")
+
+    render_token_status(context)
 
     if session.pop("reset_inputs_pending", False):
         session["age_input"] = "6-8"

@@ -11,6 +11,11 @@ import streamlit as st
 
 from app_constants import STORY_PHASES
 from gcs_storage import download_gcs_export, is_gcs_available, list_gcs_exports
+from services.generation_tokens import (
+    InsufficientGenerationTokens,
+    consume_token,
+    status_to_dict,
+)
 from services.story_service import StagePayload, StoryBundle, export_story_to_html, list_html_exports
 from story_library import record_story_export
 from telemetry import emit_log_event
@@ -20,6 +25,7 @@ from utils.time_utils import format_kst
 from session_state import reset_all_state, reset_story_session
 
 from .context import CreatePageContext
+from .tokens import render_token_status
 
 
 def render_step(context: CreatePageContext) -> None:
@@ -28,6 +34,13 @@ def render_step(context: CreatePageContext) -> None:
     use_remote_exports = context.use_remote_exports
 
     st.subheader("6단계. 이야기를 모아봤어요")
+
+    token_status = render_token_status(context, show_error=False)
+    if context.generation_token_error:
+        st.warning(f"토큰 정보를 불러오지 못했어요: {context.generation_token_error}")
+
+    token_notice: str | None = None
+    token_error_message: str | None = None
 
     title_val = (session.get("story_title") or "동화").strip()
     age_val = session.get("age") or "6-8"
@@ -209,6 +222,57 @@ def render_step(context: CreatePageContext) -> None:
                             f"library error: {exc}",
                         ],
                     )
+                uid = str(auth_user.get("uid") or "").strip()
+                if uid:
+                    try:
+                        outcome = consume_token(uid=uid, signature=signature)
+                    except InsufficientGenerationTokens:
+                        token_error_message = "생성 토큰이 부족해 새로 만든 이야기를 저장할 수 없었어요."
+                        st.session_state["generation_token_error"] = token_error_message
+                        context.generation_token_error = token_error_message
+                        emit_log_event(
+                            type="user",
+                            action="token consume",
+                            result="fail",
+                            params=[session.get("story_id"), uid, signature, "insufficient", None],
+                            user_email=user_email,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        token_error_message = f"토큰을 차감하지 못했어요: {exc}"
+                        st.session_state["generation_token_error"] = token_error_message
+                        context.generation_token_error = token_error_message
+                        emit_log_event(
+                            type="user",
+                            action="token consume",
+                            result="fail",
+                            params=[session.get("story_id"), uid, signature, "error", str(exc)],
+                            user_email=user_email,
+                        )
+                    else:
+                        token_status = outcome.status
+                        updated_payload = status_to_dict(token_status)
+                        st.session_state["generation_token_status"] = updated_payload
+                        st.session_state["generation_token_error"] = None
+                        st.session_state["generation_token_synced_at"] = datetime.now(timezone.utc).isoformat()
+                        st.session_state["generation_token_uid"] = uid
+                        st.session_state["generation_token_refill_delta"] = 0
+                        context.generation_tokens = updated_payload
+                        context.generation_token_error = None
+                        if outcome.consumed:
+                            token_notice = f"생성 토큰 1개를 사용했어요. 남은 토큰 {token_status.tokens}개"
+                        emit_log_event(
+                            type="user",
+                            action="token consume",
+                            result="success" if outcome.consumed else "noop",
+                            params=[
+                                session.get("story_id"),
+                                uid,
+                                signature,
+                                str(token_status.tokens),
+                                None,
+                            ],
+                            user_email=user_email,
+                        )
         except Exception as exc:  # pragma: no cover
             st.warning(f"자동 저장에 실패했습니다: {exc}")
             emit_log_event(
@@ -234,6 +298,10 @@ def render_step(context: CreatePageContext) -> None:
 
     if auto_saved:
         st.success("새로운 이야기를 자동으로 저장했어요.")
+        if token_notice:
+            st.success(token_notice)
+        if token_error_message:
+            st.error(token_error_message)
     elif export_path_current or export_remote_url:
         st.info("최근 저장한 동화입니다. 필요하면 다시 내려받으세요.")
 

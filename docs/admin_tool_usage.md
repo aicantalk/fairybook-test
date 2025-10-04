@@ -19,9 +19,14 @@ Authenticate with an admin email/password account. Non-admin users are rejected 
 
 ## Navigation Overview
 - **📊 대시보드** – Rolling activity summary (daily counts, top actions, success/failure split). Filters support type/action/result combinations and arbitrary date ranges. Charts degrade gracefully when `altair`/`pandas` are unavailable.
-- **👥 사용자 디렉터리** – Look up Firebase users, toggle the `disabled` flag, manage roles, generate password reset links, and apply sanctions (ban/mute/unban). Each mutation emits a `type="admin"` or `type="moderation"` log with the reason, duration, and optional context ID.
+- **👥 사용자 디렉터리** – Look up Firebase users, toggle the `disabled` flag, manage roles, generate password reset links, adjust generation tokens, and apply sanctions (ban/mute/unban). Each mutation emits a `type="admin"` or `type="moderation"` log with the reason, duration, and optional context ID.
 - **🔍 활동 탐색기** – Page through Firestore activity logs in descending timestamp order. Supports multi-select filters, free-form action tokens, and pagination for deeper investigations.
 - **⬇️ 로그 내보내기** – Gather up to `MAX_EXPORT_ROWS` (100k) records into a CSV download or push them into a Google Sheet. CSV exports stream directly; Sheets exports create or clear a worksheet named `activity_logs_YYYYMMDD_HHMM`.
+
+### Generation tokens in the admin console
+- The user directory exposes a **생성 토큰** panel for each account. It displays the current balance, auto-refill cap, and the last refill/consumption timestamps using KST formatting.
+- **자동 리필** updates the balance to the configured cap (default 10) while leaving the cap untouched.
+- The adjacent form lets administrators set explicit token and cap values. Both operations log `token refill` or `token set` activity events so adjustments remain auditable.
 
 ## Google Sheets export setup
 1. Share the destination spreadsheet with the service account used for Firestore (`google_credentials`); it needs edit permission.

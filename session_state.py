@@ -100,6 +100,13 @@ _STATE_DEFAULTS: dict[str, Any] = {
 
     # MOTD
     "motd_seen_signature": None,
+
+    # Generation token tracker
+    "generation_token_status": None,
+    "generation_token_error": None,
+    "generation_token_synced_at": None,
+    "generation_token_uid": None,
+    "generation_token_refill_delta": 0,
 }
 
 

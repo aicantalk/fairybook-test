@@ -26,6 +26,7 @@ from story_identifier import generate_story_id
 from telemetry import emit_log_event
 
 from .context import CreatePageContext
+from .tokens import render_token_status
 
 
 def render_step(context: CreatePageContext) -> None:
@@ -35,6 +36,9 @@ def render_step(context: CreatePageContext) -> None:
     illust_dir = context.illust_dir
 
     st.subheader("2단계. 제목을 만들어보세요.")
+
+    token_status = render_token_status(context)
+    tokens_exhausted = bool(token_status and token_status.tokens <= 0)
 
     rand8 = session.get("rand8") or []
     if not rand8:
@@ -199,7 +203,15 @@ def render_step(context: CreatePageContext) -> None:
 
     st.markdown("---")
 
-    if st.button("✨ 제목 만들기", type="primary", width='stretch'):
+    if tokens_exhausted:
+        st.info("생성 토큰이 모두 소진되었어요. 자정 이후 자동 충전되면 다시 시도해 주세요.")
+
+    if st.button(
+        "✨ 제목 만들기",
+        type="primary",
+        width='stretch',
+        disabled=tokens_exhausted,
+    ):
         reset_story_session()
         if not session.get("story_id"):
             started_at = datetime.now(timezone.utc)
