@@ -28,7 +28,7 @@ def _handle_post_auth_redirect() -> None:
 
 
 def render_auth_gate(home_bg: str | None) -> None:
-    render_app_styles(home_bg, show_home_hero=True)
+    render_app_styles(home_bg, show_home_hero=False)
     st.title("📖 동화책 생성기")
     st.subheader("먼저 로그인해 주세요")
 

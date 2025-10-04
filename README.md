@@ -7,7 +7,7 @@ Fairybook is a Streamlit application that helps educators and parents craft shor
 - Gemini-backed storytelling: prompts the Gemini text model for multi-paragraph narratives tailored to the selected age and topic.
 - Story pre-production: auto-generates a synopsis, detailed protagonist profile, and character concept art before the title phase.
 - Consistent illustration style: the initial generation locks a single art direction and reuses it for character art, stage visuals, and the cover.
-- HTML exports: bundle the title, cover, stage illustrations, and prose into timestamped HTML files stored under `html_exports/`.
+- HTML exports + narration: bundle the title, cover, stage illustrations, prose, and an auto-playing MP3 read-aloud track into timestamped HTML files stored under `html_exports/`.
 - Saved story browser: revisit previous exports inside the app without leaving Streamlit, with a dedicated **내 동화** view for logged-in users.
 - Daily generation tokens: authenticated users receive seven tokens at signup, gain one per KST midnight (up to ten), and spend a token the first time a finished story is saved in Step 6.
 - Temporary community board: leave quick notes for fellow writers; implemented in an isolated `community_board.py` module so it can be removed or swapped independently.
@@ -36,9 +36,10 @@ pip install -r requirements.txt
    # Optional: override the default image model
    GEMINI_IMAGE_MODEL="models/gemini-2.5-flash-image-preview"
    ```
-3. Restart the Streamlit app after changing `.env` so the new values load.
-4. Keep `.env` out of version control; only `.env.sample` should be committed.
-5. (Optional) Adjust MOTD storage with `FIRESTORE_MOTD_COLLECTION` / `FIRESTORE_MOTD_DOCUMENT` if you need a custom Firestore location; when `STORY_STORAGE_MODE=local`, the notice is saved to `motd.json` in the repo root instead.
+3. To enable the read-aloud feature, grant the service account the **Text-to-Speech Client** role, enable the Text-to-Speech API, and confirm `TTS_PREFIX` (default `tts`) points to a folder within your `GCS_BUCKET_NAME` so narration MP3s can be uploaded alongside HTML exports.
+4. Restart the Streamlit app after changing `.env` so the new values load.
+5. Keep `.env` out of version control; only `.env.sample` should be committed.
+6. (Optional) Adjust MOTD storage with `FIRESTORE_MOTD_COLLECTION` / `FIRESTORE_MOTD_DOCUMENT` if you need a custom Firestore location; when `STORY_STORAGE_MODE=local`, the notice is saved to `motd.json` in the repo root instead.
 
 ### Streamlit Cloud Secrets
 If `google-credential.json` is unavailable (for example on Streamlit Cloud), add the service-account payload to `.streamlit/secrets.toml` instead:

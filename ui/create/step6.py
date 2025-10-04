@@ -26,6 +26,7 @@ from session_state import reset_all_state, reset_story_session
 
 from .context import CreatePageContext
 from .tokens import render_token_status
+from tts_client import generate_story_audio, is_tts_configured
 
 
 def render_step(context: CreatePageContext) -> None:
@@ -152,6 +153,44 @@ def render_step(context: CreatePageContext) -> None:
     signature_raw = json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
     signature = hashlib.sha256(signature_raw.encode("utf-8")).hexdigest()
 
+    audio_url = session.get("story_audio_url")
+    audio_error = session.get("story_audio_error")
+    audio_blob = session.get("story_audio_blob")
+    audio_signature = session.get("story_audio_signature")
+    story_id_value = (session.get("story_id") or "").strip()
+
+    tts_ready = is_tts_configured()
+    if story_id_value and tts_ready and audio_signature != signature:
+        with st.spinner("동화를 읽어주는 음성을 준비하고 있어요..."):
+            audio_result = generate_story_audio(
+                story_id=story_id_value,
+                full_text=full_text,
+                voice_name=None,
+            )
+
+        session["story_audio_signature"] = signature
+        if audio_result:
+            audio_url = audio_result.public_url
+            audio_blob = audio_result.blob_name
+            audio_error = None
+            session["story_audio_url"] = audio_url
+            session["story_audio_blob"] = audio_blob
+            session["story_audio_error"] = None
+            emit_log_event(
+                type="tts",
+                action="story audio",
+                result="success",
+                params=[story_id_value, audio_blob, audio_url, None, None],
+            )
+        else:
+            audio_url = None
+            audio_blob = None
+            audio_error = "음성 파일을 준비하지 못했어요. 잠시 후 다시 시도해 주세요."
+            session["story_audio_url"] = None
+            session["story_audio_blob"] = None
+            session["story_audio_error"] = audio_error
+
+
     auto_saved = False
     if session.get("story_export_signature") != signature:
         try:
@@ -164,6 +203,7 @@ def render_step(context: CreatePageContext) -> None:
                 story_type_name=story_type_name,
                 age=age_val,
                 topic=topic_val,
+                audio_url=audio_url,
             )
             export_result = export_story_to_html(
                 bundle=bundle,
@@ -304,6 +344,12 @@ def render_step(context: CreatePageContext) -> None:
             st.error(token_error_message)
     elif export_path_current or export_remote_url:
         st.info("최근 저장한 동화입니다. 필요하면 다시 내려받으세요.")
+
+    if audio_url:
+        st.markdown("#### 동화 읽어주기")
+        st.audio(audio_url)
+    elif tts_ready and audio_error:
+        st.info(audio_error)
 
     if use_remote_exports:
         selected_export_token = session.get("selected_export")

@@ -36,6 +36,7 @@ class StoryBundle:
     story_type_name: str
     age: str
     topic: str | None
+    audio_url: str | None = None
 
 
 @dataclass(slots=True)
@@ -69,6 +70,7 @@ def _build_story_html_document(
     stages: Sequence[Mapping[str, Any]],
     cover: Mapping[str, Any] | None = None,
     author: str | None = None,
+    audio_url: str | None = None,
 ) -> str:
     escaped_title = html.escape(title)
     escaped_author = html.escape(author) if author else ""
@@ -80,6 +82,18 @@ def _build_story_html_document(
             "        <figure>\n"
             f"            <img src=\"{cover.get('image_data_uri')}\" alt=\"{escaped_title} 표지\" />\n"
             "        </figure>\n"
+            "    </section>\n"
+        )
+
+    audio_section = ""
+    if audio_url:
+        escaped_audio_url = html.escape(audio_url, quote=True)
+        audio_section = (
+            "    <section class=\"audio-player\">\n"
+            "        <h2>동화 읽어주기</h2>\n"
+            f"        <audio controls autoplay src=\"{escaped_audio_url}\">\n"
+            "            이 브라우저는 오디오 재생을 지원하지 않습니다.\n"
+            "        </audio>\n"
             "    </section>\n"
         )
 
@@ -124,6 +138,9 @@ def _build_story_html_document(
         "        h1 { font-size: 2rem; margin-bottom: 0.5rem; }\n"
         "        .meta { color: #555; font-size: 0.95rem; margin-bottom: 0.5rem; }\n"
         "        .cover { margin-bottom: 3rem; }\n"
+        "        .audio-player { margin: 2rem 0; padding: 1.5rem; background: #ffffff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }\n"
+        "        .audio-player h2 { margin-top: 0; font-size: 1.25rem; }\n"
+        "        .audio-player audio { width: 100%; margin-top: 1rem; }\n"
         "        .stage { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(0,0,0,0.08); }\n"
         "        .stage:last-of-type { border-bottom: none; }\n"
         "        figure { text-align: center; margin: 1.5rem auto; }\n"
@@ -137,7 +154,7 @@ def _build_story_html_document(
         f"        <h1>{escaped_title}</h1>\n"
         f"{author_block}"
         "    </header>\n"
-        f"{cover_section}{stages_html}"
+        f"{cover_section}{audio_section}{stages_html}"
         "</body>\n"
         "</html>\n"
     )
@@ -190,6 +207,7 @@ def export_story_to_html(
         stages=normalized_stages,
         cover=cover_section,
         author=author or "",
+        audio_url=bundle.audio_url,
     )
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")

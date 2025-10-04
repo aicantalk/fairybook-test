@@ -64,6 +64,21 @@ This guide consolidates the infrastructure steps needed to run both the reader a
   - `SERVICE_DISABLED`: enable the Google Sheets API for the project and retry.
   - `PERMISSION_DENIED`: ensure the service account is shared on the spreadsheet with at least editor access.
 
+## 6. Google Cloud Text-to-Speech (optional but recommended)
+- Enable the **Text-to-Speech API** for the project if narration is desired.
+- Grant the service account the `roles/texttospeech.client` role (project-wide or restricted to a custom role) so it can call the API.
+- Reuse the same Cloud Storage bucket as HTML exports and set `TTS_PREFIX` (defaults to `tts`) to choose where MP3 narrations land.
+- Populate or confirm the following `.env` values:
+  ```ini
+  TTS_PREFIX="tts"
+  TTS_DEFAULT_VOICE="ko-KR-Wavenet-A"  # optional override
+  ```
+- To verify credentials locally without hitting the UI, run the smoke test:
+  ```bash
+  python scripts/tts_smoke_test.py
+  ```
+  The script loads `.env`, synthesises a short sample, and uploads it using the shared service account.
+
 ## 7. Cloud Storage Bucket (optional but recommended)
 - Create a bucket to host exported stories (e.g., `fairybook-seoul`).
 - Grant the service account `Storage Object Admin` or the minimum role needed to upload/download objects.

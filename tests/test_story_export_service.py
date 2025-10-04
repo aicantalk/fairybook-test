@@ -85,3 +85,19 @@ def test_export_story_local_mode(monkeypatch, sample_bundle):
     assert result.gcs_object is None
     assert result.gcs_url is None
     assert Path(result.local_path).exists()
+
+
+def test_export_story_includes_audio(monkeypatch, sample_bundle):
+    monkeypatch.setattr("services.story_service.upload_html_to_gcs", lambda *_, **__: None)
+
+    sample_bundle.audio_url = "https://example.com/story.mp3"
+    result = export_story_to_html(
+        bundle=sample_bundle,
+        author="테스터",
+        use_remote_exports=False,
+    )
+
+    html = Path(result.local_path).read_text(encoding="utf-8")
+    assert "<audio" in html
+    assert "https://example.com/story.mp3" in html
+    assert "autoplay" in html
