@@ -2,45 +2,37 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
 import streamlit as st
-import streamlit.components.v1 as components
 
 from activity_log import init_activity_log
 from app_constants import STORY_PHASES
-from gcs_storage import download_gcs_export, is_gcs_available, list_gcs_exports
-from services.story_service import HTML_EXPORT_PATH, export_story_to_html, list_html_exports
 from services.generation_tokens import (
     GenerationTokenStatus,
     sync_on_login,
     status_from_mapping,
     status_to_dict,
 )
-from session_state import (
-    clear_stages_from,
-    ensure_state,
-    go_step,
-    reset_all_state,
-    reset_character_art,
-    reset_cover_art,
-    reset_protagonist_state,
-    reset_story_session,
-    reset_title_and_cover,
-)
+from session_state import ensure_state, reset_all_state
 from session_proxy import StorySessionProxy
-from story_identifier import generate_story_id
-from story_library import StoryRecord, init_story_library, list_story_records, record_story_export
+from story_library import init_story_library
 from telemetry import emit_log_event
 from ui.auth import render_auth_gate
 from ui.board import render_board_page
 from ui.create import CreatePageContext, render_current_step
+from ui.create.progress import count_completed_stages, compute_progress_value
 from ui.home import render_home_screen
+from ui.library import render_library_view
 from ui.settings import render_account_settings
 from ui.styles import render_app_styles
 from utils.auth import (
@@ -55,12 +47,12 @@ from motd_store import get_motd
 
 st.set_page_config(page_title="동화책 생성기", page_icon="📖", layout="centered")
 
-JSON_PATH = "storytype.json"
-STYLE_JSON_PATH = "illust_styles.json"
-STORY_JSON_PATH = "story.json"
-ENDING_JSON_PATH = "ending.json"
-ILLUST_DIR = "illust"
-HOME_BACKGROUND_IMAGE_PATH = Path("assets/illus-home-hero.png")
+JSON_PATH = BASE_DIR / "storytype.json"
+STYLE_JSON_PATH = BASE_DIR / "illust_styles.json"
+STORY_JSON_PATH = BASE_DIR / "story.json"
+ENDING_JSON_PATH = BASE_DIR / "ending.json"
+ILLUST_DIR = BASE_DIR / "illust"
+HOME_BACKGROUND_IMAGE_PATH = BASE_DIR / "assets/illus-home-hero.png"
 
 STORY_STORAGE_MODE_RAW = (os.getenv("STORY_STORAGE_MODE") or "remote").strip().lower()
 if STORY_STORAGE_MODE_RAW in {"remote", "gcs"}:
@@ -128,6 +120,68 @@ def _maybe_sync_generation_tokens(auth_user: Mapping[str, Any] | None) -> None:
         return
 
     _store_generation_token_state(uid=uid, status=sync_result.status, refilled_by=sync_result.refilled_by)
+
+
+def _maybe_show_motd(active_motd: Mapping[str, Any] | None, *, mode: str | None) -> None:
+    if not active_motd or mode == "auth":
+        return
+
+    signature = str(active_motd.get("signature") or "").strip()
+    message = str(active_motd.get("message") or "").strip()
+    if not signature or not message:
+        return
+
+    seen_signature = st.session_state.get("motd_seen_signature")
+    if mode == "board" and seen_signature != signature:
+        st.session_state["motd_seen_signature"] = signature
+        return
+
+    if seen_signature == signature:
+        return
+
+    meta_parts: list[str] = []
+    updated_kst = active_motd.get("updated_at_kst")
+    if updated_kst:
+        meta_parts.append(f"업데이트: {updated_kst}")
+    updated_by = active_motd.get("updated_by")
+    if updated_by:
+        meta_parts.append(f"작성자: {updated_by}")
+
+    def _render_content() -> None:
+        st.markdown(message)
+        if meta_parts:
+            st.caption(" · ".join(meta_parts))
+
+    def _acknowledge() -> None:
+        st.session_state["motd_seen_signature"] = signature
+        st.rerun()
+
+    if hasattr(st, "modal"):
+        with st.modal("📢 공지사항", key="motd_modal"):
+            _render_content()
+            if st.button("확인했어요", use_container_width=True, key="motd_ack_modal"):
+                _acknowledge()
+    elif hasattr(st, "experimental_dialog"):
+        @st.experimental_dialog("📢 공지사항")
+        def _motd_dialog() -> None:
+            _render_content()
+            if st.button("확인했어요", use_container_width=True, key="motd_ack_experimental"):
+                _acknowledge()
+
+        _motd_dialog()
+    elif hasattr(st, "dialog"):
+        @st.dialog("📢 공지사항")
+        def _motd_dialog() -> None:
+            _render_content()
+            if st.button("확인했어요", use_container_width=True, key="motd_ack_dialog"):
+                _acknowledge()
+
+        _motd_dialog()
+    else:
+        st.info(message)
+        if meta_parts:
+            st.caption(" · ".join(meta_parts))
+        st.session_state["motd_seen_signature"] = signature
 
 
 def _load_json_entries_from_file(path: str | Path, key: str) -> list[dict]:
@@ -232,54 +286,7 @@ if motd_record and motd_record.is_active and motd_record.message.strip():
         "updated_by": motd_record.updated_by,
     }
 
-if active_motd and mode != "auth":
-    prior_signature = st.session_state.get("motd_seen_signature")
-    if prior_signature != active_motd["signature"] and mode == "board":
-        # 대시보드/게시판 등 로그인 이후에도 공지를 강제로 보여주지 않도록 signature를 기록해둔다.
-        st.session_state["motd_seen_signature"] = active_motd["signature"]
-
-    if st.session_state.get("motd_seen_signature") != active_motd["signature"]:
-        meta_parts: list[str] = []
-        if active_motd.get("updated_at_kst"):
-            meta_parts.append(f"업데이트: {active_motd['updated_at_kst']}")
-        if active_motd.get("updated_by"):
-            meta_parts.append(f"작성자: {active_motd['updated_by']}")
-
-        def _render_motd_content() -> None:
-            st.markdown(active_motd["message"])
-            if meta_parts:
-                st.caption(" · ".join(meta_parts))
-
-        def _acknowledge() -> None:
-            st.session_state["motd_seen_signature"] = active_motd["signature"]
-            st.rerun()
-
-        if hasattr(st, "modal"):
-            with st.modal("📢 공지사항", key="motd_modal"):
-                _render_motd_content()
-                if st.button("확인했어요", use_container_width=True, key="motd_ack_modal"):
-                    _acknowledge()
-        elif hasattr(st, "experimental_dialog"):
-            @st.experimental_dialog("📢 공지사항")
-            def _motd_dialog() -> None:
-                _render_motd_content()
-                if st.button("확인했어요", use_container_width=True, key="motd_ack_experimental"):
-                    _acknowledge()
-
-            _motd_dialog()
-        elif hasattr(st, "dialog"):
-            @st.dialog("📢 공지사항")
-            def _motd_dialog() -> None:
-                _render_motd_content()
-                if st.button("확인했어요", use_container_width=True, key="motd_ack_dialog"):
-                    _acknowledge()
-
-            _motd_dialog()
-        else:
-            st.info(active_motd["message"])
-            if meta_parts:
-                st.caption(" · ".join(meta_parts))
-            st.session_state["motd_seen_signature"] = active_motd["signature"]
+_maybe_show_motd(active_motd, mode=mode)
 
 if mode in {"create", "board", "settings"} and not auth_user:
     st.session_state["auth_next_action"] = mode
@@ -325,28 +332,16 @@ with header_cols[1]:
             st.caption("로그인하면 더 많은 기능을 사용할 수 있어요.")
 
 progress_placeholder = st.empty()
-
-
-if mode == "create" and current_step > 0:
-    total_phases = len(STORY_PHASES)
-    completed_stages = sum(1 for stage in st.session_state.get("stages_data", []) if stage)
-    progress_value = 0.0
-    if current_step == 1:
-        progress_value = 0.15
-    elif current_step == 2:
-        progress_value = 0.25
-    elif current_step == 3:
-        progress_value = 0.35
-    elif current_step in (4, 5):
-        stage_share = completed_stages / total_phases if total_phases else 0.0
-        progress_value = 0.35 + stage_share * 0.6
-    elif current_step == 6:
-        if completed_stages >= total_phases:
-            progress_value = 1.0
-        else:
-            stage_share = completed_stages / total_phases if total_phases else 0.0
-            progress_value = 0.35 + stage_share * 0.6
-    progress_placeholder.progress(min(progress_value, 1.0))
+stages_data = st.session_state.get("stages_data")
+completed_stages = count_completed_stages(stages_data if isinstance(stages_data, list) else None)
+progress_value = compute_progress_value(
+    mode=mode,
+    current_step=current_step,
+    completed_stages=completed_stages,
+    total_phases=len(STORY_PHASES),
+)
+if progress_value is not None:
+    progress_placeholder.progress(progress_value)
 else:
     progress_placeholder.empty()
 
@@ -369,7 +364,7 @@ create_context = CreatePageContext(
     use_remote_exports=USE_REMOTE_EXPORTS,
     auth_user=auth_user,
     home_background=home_bg,
-    illust_dir=ILLUST_DIR,
+    illust_dir=str(ILLUST_DIR),
     generation_tokens=st.session_state.get("generation_token_status"),
     generation_token_error=st.session_state.get("generation_token_error"),
 )
@@ -387,245 +382,10 @@ elif mode == "create" and current_step in {1, 2, 3, 4, 5, 6}:
     render_current_step(create_context, current_step)
     st.stop()
 elif current_step == 5 and mode == "view":
-    st.subheader("저장한 동화 보기")
-    if STORY_LIBRARY_INIT_ERROR:
-        st.warning(f"동화 기록 저장소 초기화 중 문제가 발생했어요: {STORY_LIBRARY_INIT_ERROR}")
-    filter_options = ["모두의 동화"]
-    if auth_user:
-        filter_options.append("내 동화")
-
-    view_filter = st.radio(
-        "어떤 동화를 살펴볼까요?",
-        filter_options,
-        horizontal=True,
-        key="story_view_filter",
+    render_library_view(
+        session=session_proxy,
+        auth_user=auth_user,
+        use_remote_exports=USE_REMOTE_EXPORTS,
+        library_init_error=STORY_LIBRARY_INIT_ERROR,
     )
-    if not auth_user:
-        st.caption("로그인하면 내가 만든 동화만 모아볼 수 있어요.")
-
-    records: list[StoryRecord] | None = None
-    records_error: str | None = None
-    try:
-        if view_filter == "내 동화" and auth_user:
-            records = list_story_records(user_id=str(auth_user.get("uid")), limit=100)
-        else:
-            records = list_story_records(limit=100)
-    except Exception as exc:  # pragma: no cover - defensive catch
-        records_error = str(exc)
-        records = []
-
-    if records_error:
-        st.error(f"동화 기록을 불러오지 못했어요: {records_error}")
-
-    entries: list[dict[str, Any]] = []
-    recorded_keys: set[str] = set()
-
-    for record in records:
-        key_candidate = (record.gcs_object or record.local_path or record.html_filename or "").lower()
-        if key_candidate:
-            recorded_keys.add(key_candidate)
-        entries.append(
-            {
-                "token": f"record:{record.id}",
-                "title": record.title,
-                "author": record.author_name,
-                "story_id": record.story_id,
-                "created_at": record.created_at_utc,
-                "local_path": record.local_path,
-                "gcs_object": record.gcs_object,
-                "gcs_url": record.gcs_url,
-                "html_filename": record.html_filename,
-                "origin": "record",
-            }
-        )
-
-    include_legacy = view_filter != "내 동화"
-    if include_legacy:
-        legacy_candidates: list[Any] = []
-        if USE_REMOTE_EXPORTS:
-            if is_gcs_available():
-                legacy_candidates = list_gcs_exports()
-        else:
-            legacy_candidates = list_html_exports()
-
-        for item in legacy_candidates:
-            if USE_REMOTE_EXPORTS:
-                key = (item.object_name or item.filename).lower()
-                if key in recorded_keys:
-                    continue
-                created_at = item.updated
-                if created_at and created_at.tzinfo is None:
-                    created_at = created_at.replace(tzinfo=timezone.utc)
-                created_at = created_at or datetime.fromtimestamp(0, tz=timezone.utc)
-                entries.append(
-                    {
-                        "token": f"legacy-remote:{item.object_name}",
-                        "title": Path(item.filename).stem,
-                        "author": None,
-                        "created_at": created_at,
-                        "local_path": None,
-                        "gcs_object": item.object_name,
-                        "gcs_url": item.public_url,
-                        "html_filename": item.filename,
-                        "origin": "legacy-remote",
-                    }
-                )
-            else:
-                key = str(item).lower()
-                if key in recorded_keys:
-                    continue
-                try:
-                    mtime = datetime.fromtimestamp(item.stat().st_mtime, tz=timezone.utc)
-                except Exception:
-                    mtime = datetime.fromtimestamp(0, tz=timezone.utc)
-                entries.append(
-                    {
-                        "token": f"legacy-local:{item}",
-                        "title": item.stem,
-                        "author": None,
-                        "created_at": mtime,
-                        "local_path": str(item),
-                        "gcs_object": None,
-                        "gcs_url": None,
-                        "html_filename": item.name,
-                        "origin": "legacy-local",
-                    }
-                )
-
-    if not entries:
-        if view_filter == "내 동화":
-            st.info("아직 내가 만든 동화가 없어요. 새 동화를 만들어보세요.")
-        else:
-            st.info("저장된 동화가 없습니다. 먼저 동화를 생성해주세요.")
-    else:
-        entries.sort(key=lambda entry: entry.get("created_at", datetime.fromtimestamp(0, tz=timezone.utc)), reverse=True)
-
-        def _format_entry(idx: int) -> str:
-            entry = entries[idx]
-            created = entry.get("created_at")
-            stamp = format_kst(created) if created else "시간 정보 없음"
-            author = entry.get("author")
-            if author and view_filter != "내 동화":
-                return f"{entry['title']} · {author} · {stamp}"
-            return f"{entry['title']} · {stamp}"
-
-        tokens = [entry["token"] for entry in entries]
-        selected_token = st.session_state.get("selected_export")
-        default_index = 0
-        if selected_token in tokens:
-            default_index = tokens.index(selected_token)
-
-        selected_index = st.selectbox(
-            "읽고 싶은 동화를 선택하세요",
-            list(range(len(entries))),
-            index=default_index,
-            format_func=_format_entry,
-            key="story_entry_select",
-        )
-
-        selected_entry = entries[selected_index]
-        st.session_state["selected_export"] = selected_entry["token"]
-        st.session_state["view_story_id"] = selected_entry.get("story_id")
-        st.session_state["story_export_remote_blob"] = selected_entry.get("gcs_object")
-        st.session_state["story_export_remote_url"] = selected_entry.get("gcs_url")
-
-        html_content: str | None = None
-        html_error: str | None = None
-        local_candidates: list[Path] = []
-
-        local_path = selected_entry.get("local_path")
-        if local_path:
-            local_candidates.append(Path(local_path))
-        html_filename = selected_entry.get("html_filename")
-        if html_filename:
-            local_candidates.append(HTML_EXPORT_PATH / html_filename)
-
-        for candidate in local_candidates:
-            try:
-                if candidate.exists():
-                    html_content = candidate.read_text("utf-8")
-                    st.session_state["story_export_path"] = str(candidate)
-                    break
-            except Exception as exc:
-                html_error = str(exc)
-
-        if html_content is None and selected_entry.get("gcs_object"):
-            html_content = download_gcs_export(selected_entry["gcs_object"])
-            if html_content is None:
-                html_error = "원격 저장소에서 파일을 불러오지 못했어요."
-
-        token = selected_entry["token"]
-        story_origin = selected_entry.get("origin")
-        story_title_display = selected_entry.get("title")
-        story_id_value = selected_entry.get("story_id")
-
-        if html_content is None:
-            if html_error:
-                st.error(f"동화를 여는 데 실패했습니다: {html_error}")
-            else:
-                st.error("동화를 여는 데 실패했습니다.")
-            if selected_entry.get("gcs_url"):
-                st.caption(f"파일 URL: {selected_entry['gcs_url']}")
-            elif local_path:
-                st.caption(f"파일 경로: {local_path}")
-            log_key = f"fail:{token}"
-            if st.session_state.get("story_view_logged_token") != log_key:
-                emit_log_event(
-                    type="story",
-                    action="story view",
-                    result="fail",
-                    params=[
-                        story_id_value or token,
-                        story_title_display,
-                        story_origin,
-                        selected_entry.get("gcs_url") or local_path,
-                        html_error or "missing content",
-                    ],
-                )
-                st.session_state["story_view_logged_token"] = log_key
-        else:
-            st.download_button(
-                "동화 다운로드",
-                data=html_content,
-                file_name=selected_entry.get("html_filename") or "story.html",
-                mime="text/html",
-                width='stretch',
-            )
-            if selected_entry.get("gcs_url"):
-                st.caption(f"파일 URL: {selected_entry['gcs_url']}")
-            elif local_path:
-                st.caption(f"파일 경로: {local_path}")
-            components.html(html_content, height=700, scrolling=True)
-            log_key = f"success:{token}"
-            if st.session_state.get("story_view_logged_token") != log_key:
-                emit_log_event(
-                    type="story",
-                    action="story view",
-                    result="success",
-                    params=[
-                        story_id_value or token,
-                        story_title_display,
-                        story_origin,
-                        selected_entry.get("gcs_url") or local_path,
-                        None,
-                    ],
-                )
-                st.session_state["story_view_logged_token"] = log_key
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("← 선택 화면으로", width='stretch'):
-            st.session_state["mode"] = None
-            st.session_state["step"] = 0
-            st.session_state["selected_export"] = None
-            st.session_state["story_export_path"] = None
-            st.session_state["view_story_id"] = None
-            st.session_state["story_view_logged_token"] = None
-            st.rerun()
-    with c2:
-        if st.button("✏️ 새 동화 만들기", width='stretch'):
-            st.session_state["mode"] = "create"
-            st.session_state["step"] = 1
-            st.session_state["story_view_logged_token"] = None
-            st.session_state["view_story_id"] = None
-            st.rerun()
+    st.stop()

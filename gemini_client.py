@@ -26,10 +26,6 @@ _STYLE_JSON_PATH = Path("illust_styles.json")
 _ILLUST_STYLES_CACHE: list[dict] | None = None
 
 
-def _get_genai_module():
-    return gemini_api.get_genai_module()
-
-
 genai = gemini_api.genai
 
 
@@ -121,10 +117,6 @@ def _load_illust_styles() -> list[dict]:
 
     _ILLUST_STYLES_CACHE = cleaned
     return _ILLUST_STYLES_CACHE
-
-
-def _missing_api_key_error() -> dict:
-    return gemini_api.missing_api_key_error()
 
 
 def _require_api_key() -> dict | None:
@@ -474,7 +466,6 @@ __all__ = [
     "_extract_first_json_object",
     "_coerce_str_list",
     "_load_illust_styles",
-    "_missing_api_key_error",
     "_require_api_key",
     "_generate_text_with_retry",
     "_parse_json_from_text",
@@ -486,6 +477,5 @@ __all__ = [
     "generate_story_with_gemini",
     "generate_image_with_gemini",
     "genai",
-    "_get_genai_module",
 ]
 

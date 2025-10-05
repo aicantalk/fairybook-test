@@ -157,3 +157,4 @@ The suites under `tests/` mock external services (Gemini, Firebase, and GCS) so 
 - Repository contribution guidelines: `AGENTS.md`
 - Illustration style reference: `illust_styles.json`
 - Cloud configuration checklist: `docs/cloud_setup_guide.md`
+- Refactoring guidelines and plan: `docs/refactoring_guidelines.md`, `docs/refactoring_workplan.md`
