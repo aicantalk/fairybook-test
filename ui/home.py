@@ -7,7 +7,6 @@ import streamlit as st
 
 from gcs_storage import is_gcs_available, list_gcs_exports
 from services.generation_tokens import status_from_mapping
-from services.story_service import list_html_exports
 from story_library import list_story_records
 from session_state import ensure_state, reset_all_state
 from utils.time_utils import format_kst
@@ -15,7 +14,6 @@ from utils.time_utils import format_kst
 def render_home_screen(
     *,
     auth_user: Mapping[str, object] | None,
-    use_remote_exports: bool,
     story_types: Sequence[Mapping[str, object]],
     motd: Mapping[str, Any] | None = None,
     generation_tokens: Mapping[str, Any] | None = None,
@@ -25,10 +23,7 @@ def render_home_screen(
     try:
         exports_available = bool(list_story_records(limit=1))
     except Exception:
-        if use_remote_exports and is_gcs_available():
-            exports_available = bool(list_gcs_exports())
-        else:
-            exports_available = bool(list_html_exports())
+        exports_available = bool(list_gcs_exports()) if is_gcs_available() else False
 
     token_status = status_from_mapping(generation_tokens)
     allow_create = True

@@ -16,7 +16,7 @@ from services.generation_tokens import (
     consume_token,
     status_to_dict,
 )
-from services.story_service import StagePayload, StoryBundle, export_story_to_html, list_html_exports
+from services.story_service import StagePayload, StoryBundle, export_story_to_html
 from story_library import record_story_export
 from telemetry import emit_log_event
 from utils.auth import auth_display_name, auth_email
@@ -32,7 +32,6 @@ from tts_client import generate_story_audio, is_tts_configured
 def render_step(context: CreatePageContext) -> None:
     session = context.session
     auth_user = context.auth_user
-    use_remote_exports = context.use_remote_exports
 
     st.subheader("6단계. 이야기를 모아봤어요")
 
@@ -208,20 +207,15 @@ def render_step(context: CreatePageContext) -> None:
             export_result = export_story_to_html(
                 bundle=bundle,
                 author=auth_display_name(auth_user) if auth_user else None,
-                use_remote_exports=use_remote_exports,
+                use_remote_exports=True,
             )
             session["story_export_path"] = export_result.local_path
             session["story_export_signature"] = signature
-            if use_remote_exports:
-                session["story_export_remote_url"] = export_result.gcs_url
-                session["story_export_remote_blob"] = export_result.gcs_object
-                if export_result.gcs_object:
-                    session["selected_export"] = f"gcs:{export_result.gcs_object}"
-                else:
-                    session["selected_export"] = export_result.local_path
-            else:
-                session["story_export_remote_url"] = None
-                session["story_export_remote_blob"] = None
+            session["story_export_remote_url"] = export_result.gcs_url
+            session["story_export_remote_blob"] = export_result.gcs_object
+            if export_result.gcs_object:
+                session["selected_export"] = f"gcs:{export_result.gcs_object}"
+            elif export_result.local_path:
                 session["selected_export"] = export_result.local_path
             auto_saved = True
             user_email = auth_email(auth_user)
@@ -351,39 +345,43 @@ def render_step(context: CreatePageContext) -> None:
     elif tts_ready and audio_error:
         st.info(audio_error)
 
-    if use_remote_exports:
-        selected_export_token = session.get("selected_export")
-        options: list[tuple[str, str]] = []
-        if export_remote_blob and export_remote_url:
-            options.append((f"gcs:{export_remote_blob}", f"신규 업로드 · {Path(export_remote_blob).name}"))
+    selected_export_token = session.get("selected_export")
+    options: list[tuple[str, str]] = []
+    seen_tokens: set[str] = set()
+    if export_remote_blob and export_remote_url:
+        token = f"gcs:{export_remote_blob}"
+        options.append((token, f"신규 업로드 · {Path(export_remote_blob).name}"))
+        seen_tokens.add(token)
 
-        if is_gcs_available():
-            for item in list_gcs_exports():
-                token = f"gcs:{item.object_name}"
-                label = f"{Path(item.filename).stem} ({format_kst(item.updated)})"
-                options.append((token, label))
+    if is_gcs_available():
+        for item in list_gcs_exports():
+            token = f"gcs:{item.object_name}"
+            if token in seen_tokens:
+                continue
+            label = f"{Path(item.filename).stem} ({format_kst(item.updated)})"
+            options.append((token, label))
+            seen_tokens.add(token)
 
-        if options:
-            selected_export_token = st.selectbox(
-                "다운로드할 동화를 선택하세요",
-                options,
-                format_func=lambda item: item[1],
-                index=next((idx for idx, opt in enumerate(options) if opt[0] == selected_export_token), 0),
-                key="story_export_selector",
-            )[0]
-            session["selected_export"] = selected_export_token
+    if options:
+        selected_index = next((idx for idx, opt in enumerate(options) if opt[0] == selected_export_token), 0)
+        selected_value = st.selectbox(
+            "다운로드할 동화를 선택하세요",
+            options,
+            format_func=lambda option: option[1],
+            index=selected_index if options else 0,
+            key="story_export_selector",
+        )
+        selected_export_token = selected_value[0]
+        session["selected_export"] = selected_export_token
 
-            if selected_export_token and selected_export_token.startswith("gcs:"):
-                blob_name = selected_export_token.split(":", 1)[1]
-                if st.button("📥 GCS에서 다운로드", key="download_selected_gcs", use_container_width=True):
-                    download_gcs_export(blob_name)
-        else:
-            st.info("아직 업로드한 동화가 없어요.")
+        if selected_export_token.startswith("gcs:"):
+            blob_name = selected_export_token.split(":", 1)[1]
+            if st.button("📥 GCS에서 다운로드", key="download_selected_gcs", use_container_width=True):
+                download_gcs_export(blob_name)
+    elif export_path_current:
+        st.caption(f"최근 생성한 HTML 파일: {export_path_current}")
     else:
-        if export_path_current:
-            st.caption(f"로컬 파일: {export_path_current}")
-        else:
-            st.info("내려받을 수 있는 HTML 파일이 아직 없습니다.")
+        st.info("아직 업로드한 동화가 없어요.")
 
     st.markdown(f"### {title_val}")
     if cover_image:
@@ -391,8 +389,6 @@ def render_step(context: CreatePageContext) -> None:
     elif cover_error:
         st.caption("표지 일러스트를 준비하지 못했어요.")
 
-    last_export = session.get("story_export_path")
-    last_remote = session.get("story_export_remote_url")
 
     for idx, section in enumerate(display_sections):
         if section.get("missing"):

@@ -30,7 +30,7 @@ Key helpers such as `session_state.go_step()` and the service-layer `export_stor
 
 ## Admin Console
 - `admin_ui/announcements.render_announcements()` adds a dedicated **공지 관리** tab that lets operators compose Markdown notices, toggle activation, preview the formatted result, and rapidly disable the banner.
-- Saved notices write through `motd_store.save_motd()`, which targets Firestore when `STORY_STORAGE_MODE` is `remote` and falls back to `motd.json` for local development. Each change emits admin telemetry so updates remain auditable.
+- Saved notices write through `motd_store.save_motd()`, which targets Firestore so updates remain auditable.
 - The public app reads the same store and hashes the payload into a signature so first-visit modals only reappear when the underlying message changes.
 
 ## Story Generation Pipeline
@@ -63,7 +63,7 @@ All JSON files are UTF-8 encoded and loaded lazily so Streamlit reruns stay resp
 - The `scripts/verify_firebase_admin.py` utility loads `.env`, resolves credentials, and performs a dummy custom-token round trip to validate Admin SDK access before running Streamlit.
 - The default text model is `models/gemini-2.5-flash`; adjust `GEMINI_TEXT_MODEL` in your `.env` when latency or cost trade-offs change.
 - Illustration model selection is environment-driven via `_IMAGE_MODEL`; use `genai.list_models()` during development to verify availability before changing defaults.
-- MOTD storage defaults to Firestore collection `motd/current`. Override `FIRESTORE_MOTD_COLLECTION` and `FIRESTORE_MOTD_DOCUMENT` as needed, or set `STORY_STORAGE_MODE=local` to keep notices in `motd.json` while prototyping.
+- MOTD storage defaults to Firestore collection `motd/current`. Override `FIRESTORE_MOTD_COLLECTION` and `FIRESTORE_MOTD_DOCUMENT` as needed.
 
 ## Error Handling & UX Feedback
 - Missing secrets, empty JSON payloads, and Gemini safety blocks propagate as structured `{"error": ...}` dictionaries so the UI can surface localized Korean messages.

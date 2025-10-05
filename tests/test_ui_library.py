@@ -55,7 +55,6 @@ def test_load_library_entries_merges_records_and_remote(monkeypatch):
     entries, error = library.load_library_entries(
         auth_user={"uid": "user-1"},
         only_mine=True,
-        use_remote_exports=True,
         include_legacy=True,
     )
 
@@ -69,24 +68,28 @@ def test_load_library_entries_merges_records_and_remote(monkeypatch):
     assert entries[1].gcs_url == "https://example.com/story2.html"
 
 
-def test_load_library_entries_includes_local_exports(tmp_path, monkeypatch):
-    html_file = tmp_path / "local_story.html"
-    html_file.write_text("<html>content</html>", encoding="utf-8")
+def test_load_library_entries_legacy_remote_only(monkeypatch):
+    remote_exports = [
+        SimpleNamespace(
+            object_name="exports/story3.html",
+            filename="story3.html",
+            public_url="https://example.com/story3.html",
+            updated=datetime(2024, 1, 5, tzinfo=timezone.utc),
+        )
+    ]
 
     monkeypatch.setattr(library, "list_story_records", lambda **_: [])
-    monkeypatch.setattr(library, "list_html_exports", lambda: [html_file])
+    monkeypatch.setattr(library, "list_gcs_exports", lambda: remote_exports)
 
     entries, error = library.load_library_entries(
         auth_user=None,
         only_mine=False,
-        use_remote_exports=False,
         include_legacy=True,
     )
 
     assert error is None
     assert len(entries) == 1
     entry = entries[0]
-    assert entry.origin == "legacy-local"
-    assert entry.local_path == str(html_file)
-    assert entry.html_filename == html_file.name
-    assert entry.gcs_object is None
+    assert entry.origin == "legacy-remote"
+    assert entry.gcs_object == "exports/story3.html"
+    assert entry.html_filename == "story3.html"

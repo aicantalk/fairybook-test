@@ -4,10 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from gcs_storage import download_gcs_export, list_gcs_exports
-from services.story_service import HTML_EXPORT_PATH, list_html_exports
+from services.story_service import HTML_EXPORT_PATH
 from session_proxy import StorySessionProxy
 from story_library import StoryRecord, list_story_records
 from telemetry import emit_log_event
@@ -42,7 +42,6 @@ def load_library_entries(
     *,
     auth_user: Mapping[str, Any] | None,
     only_mine: bool,
-    use_remote_exports: bool,
     include_legacy: bool,
     limit: int = 100,
 ) -> tuple[list[LibraryEntry], str | None]:
@@ -82,62 +81,31 @@ def load_library_entries(
         )
 
     if include_legacy:
-        legacy_candidates: Iterable[Any]
-        if use_remote_exports:
-            legacy_candidates = list_gcs_exports()
-        else:
-            legacy_candidates = list_html_exports()
-
-        for item in legacy_candidates:
-            if use_remote_exports:
-                object_name = (getattr(item, "object_name", "") or "").strip()
-                filename = (getattr(item, "filename", "") or "").strip()
-                key = (object_name or filename).lower()
-                if key in recorded_keys:
-                    continue
-                recorded_keys.add(key)
-                created_at = getattr(item, "updated", None)
-                if created_at and getattr(created_at, "tzinfo", None) is None:
-                    created_at = created_at.replace(tzinfo=timezone.utc)
-                created_at = created_at or _EPOCH
-                entries.append(
-                    LibraryEntry(
-                        token=f"legacy-remote:{object_name or filename}",
-                        title=Path(filename).stem,
-                        author=None,
-                        story_id=None,
-                        created_at=created_at,
-                        local_path=None,
-                        gcs_object=object_name or None,
-                        gcs_url=getattr(item, "public_url", None),
-                        html_filename=filename or None,
-                        origin="legacy-remote",
-                    )
+        for item in list_gcs_exports():
+            object_name = (getattr(item, "object_name", "") or "").strip()
+            filename = (getattr(item, "filename", "") or "").strip()
+            key = (object_name or filename).lower()
+            if key in recorded_keys:
+                continue
+            recorded_keys.add(key)
+            created_at = getattr(item, "updated", None)
+            if created_at and getattr(created_at, "tzinfo", None) is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = created_at or _EPOCH
+            entries.append(
+                LibraryEntry(
+                    token=f"legacy-remote:{object_name or filename}",
+                    title=Path(filename).stem,
+                    author=None,
+                    story_id=None,
+                    created_at=created_at,
+                    local_path=None,
+                    gcs_object=object_name or None,
+                    gcs_url=getattr(item, "public_url", None),
+                    html_filename=filename or None,
+                    origin="legacy-remote",
                 )
-            else:
-                path = Path(item)
-                key = str(path).lower()
-                if key in recorded_keys:
-                    continue
-                recorded_keys.add(key)
-                try:
-                    mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-                except Exception:
-                    mtime = _EPOCH
-                entries.append(
-                    LibraryEntry(
-                        token=f"legacy-local:{path}",
-                        title=path.stem,
-                        author=None,
-                        story_id=None,
-                        created_at=mtime,
-                        local_path=str(path),
-                        gcs_object=None,
-                        gcs_url=None,
-                        html_filename=path.name,
-                        origin="legacy-local",
-                    )
-                )
+            )
 
     entries.sort(key=lambda entry: _normalize_timestamp(entry.created_at), reverse=True)
     return entries, records_error
@@ -184,7 +152,6 @@ def render_library_view(
     *,
     session: StorySessionProxy,
     auth_user: Mapping[str, Any] | None,
-    use_remote_exports: bool,
     library_init_error: str | None = None,
 ) -> None:
     import streamlit as st
@@ -211,7 +178,6 @@ def render_library_view(
     entries, load_error = load_library_entries(
         auth_user=auth_user,
         only_mine=only_mine,
-        use_remote_exports=use_remote_exports,
         include_legacy=not only_mine,
     )
 

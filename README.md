@@ -39,7 +39,7 @@ pip install -r requirements.txt
 3. To enable the read-aloud feature, grant the service account the **Text-to-Speech Client** role, enable the Text-to-Speech API, and confirm `TTS_PREFIX` (default `tts`) points to a folder within your `GCS_BUCKET_NAME` so narration MP3s can be uploaded alongside HTML exports.
 4. Restart the Streamlit app after changing `.env` so the new values load.
 5. Keep `.env` out of version control; only `.env.sample` should be committed.
-6. (Optional) Adjust MOTD storage with `FIRESTORE_MOTD_COLLECTION` / `FIRESTORE_MOTD_DOCUMENT` if you need a custom Firestore location; when `STORY_STORAGE_MODE=local`, the notice is saved to `motd.json` in the repo root instead.
+6. (Optional) Adjust MOTD storage with `FIRESTORE_MOTD_COLLECTION` / `FIRESTORE_MOTD_DOCUMENT` if you need a custom Firestore location. Notices are always stored in Firestore.
 
 ### Streamlit Cloud Secrets
 If `google-credential.json` is unavailable (for example on Streamlit Cloud), add the service-account payload to `.streamlit/secrets.toml` instead:

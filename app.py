@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -54,13 +53,6 @@ ENDING_JSON_PATH = BASE_DIR / "ending.json"
 ILLUST_DIR = BASE_DIR / "illust"
 HOME_BACKGROUND_IMAGE_PATH = BASE_DIR / "assets/illus-home-hero.png"
 
-STORY_STORAGE_MODE_RAW = (os.getenv("STORY_STORAGE_MODE") or "remote").strip().lower()
-if STORY_STORAGE_MODE_RAW in {"remote", "gcs"}:
-    STORY_STORAGE_MODE = "remote"
-else:
-    STORY_STORAGE_MODE = "local"
-
-USE_REMOTE_EXPORTS = STORY_STORAGE_MODE == "remote"
 STORY_LIBRARY_INIT_ERROR: str | None = None
 try:
     init_story_library()
@@ -361,7 +353,6 @@ create_context = CreatePageContext(
     illust_styles=illust_styles,
     story_cards=story_cards,
     ending_cards=ending_cards,
-    use_remote_exports=USE_REMOTE_EXPORTS,
     auth_user=auth_user,
     home_background=home_bg,
     illust_dir=str(ILLUST_DIR),
@@ -372,7 +363,6 @@ create_context = CreatePageContext(
 if current_step == 0:
     render_home_screen(
         auth_user=auth_user,
-        use_remote_exports=USE_REMOTE_EXPORTS,
         story_types=story_types,
         motd=active_motd,
         generation_tokens=st.session_state.get("generation_token_status"),
@@ -385,7 +375,6 @@ elif current_step == 5 and mode == "view":
     render_library_view(
         session=session_proxy,
         auth_user=auth_user,
-        use_remote_exports=USE_REMOTE_EXPORTS,
         library_init_error=STORY_LIBRARY_INIT_ERROR,
     )
     st.stop()

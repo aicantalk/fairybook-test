@@ -46,14 +46,6 @@ class ExportResult:
     gcs_url: str | None = None
 
 
-def list_html_exports() -> list[Path]:
-    try:
-        files = [p for p in HTML_EXPORT_PATH.glob("*.html") if p.is_file()]
-        return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
-    except Exception:
-        return []
-
-
 def _slugify_filename(value: str) -> str:
     value = value.lower().strip()
     value = re.sub(r"[^a-z0-9]+", "-", value)
@@ -232,6 +224,5 @@ __all__ = [
     "StoryBundle",
     "ExportResult",
     "export_story_to_html",
-    "list_html_exports",
     "HTML_EXPORT_PATH",
 ]

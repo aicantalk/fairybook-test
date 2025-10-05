@@ -14,7 +14,6 @@ class CreatePageContext:
     illust_styles: list[dict]
     story_cards: list[dict]
     ending_cards: list[dict]
-    use_remote_exports: bool
     auth_user: Mapping[str, Any] | None
     home_background: str | None
     illust_dir: str
@@ -23,4 +22,3 @@ class CreatePageContext:
 
 
 __all__ = ["CreatePageContext"]
-

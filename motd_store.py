@@ -1,12 +1,10 @@
 """Storage helpers for a message-of-the-day announcement."""
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Mapping
 
 from google_credentials import get_service_account_credentials
@@ -15,12 +13,6 @@ try:  # pragma: no cover - optional dependency resolved at runtime
     from google.cloud import firestore  # type: ignore
 except Exception:  # pragma: no cover - gracefully handle missing package
     firestore = None  # type: ignore
-
-
-MOTD_JSON_PATH = Path("motd.json")
-
-_STORAGE_MODE = (os.getenv("STORY_STORAGE_MODE") or "remote").strip().lower()
-USE_REMOTE_MOTD = _STORAGE_MODE in {"remote", "gcs"}
 
 GCP_PROJECT_ID = (os.getenv("GCP_PROJECT_ID") or "").strip()
 MOTD_COLLECTION = (os.getenv("FIRESTORE_MOTD_COLLECTION") or "motd").strip() or "motd"
@@ -43,9 +35,6 @@ class Motd:
 
 
 def _ensure_remote_ready() -> None:
-    if not USE_REMOTE_MOTD:
-        return
-
     if firestore is None:
         raise RuntimeError("google-cloud-firestore must be installed for MOTD storage")
 
@@ -113,28 +102,16 @@ def _deserialize(payload: Mapping[str, Any]) -> Motd:
 def get_motd() -> Motd | None:
     """Return the stored MOTD record, or ``None`` when none exists."""
 
-    if USE_REMOTE_MOTD:
-        try:
-            doc = _get_firestore_document().get()
-        except Exception:
-            return None
-        if not doc or not doc.exists:
-            return None
-        data = doc.to_dict() or {}
-        if not isinstance(data, Mapping):
-            return None
-        return _deserialize(data)
-
-    if not MOTD_JSON_PATH.is_file():
-        return None
-
     try:
-        payload = json.loads(MOTD_JSON_PATH.read_text("utf-8"))
-    except (json.JSONDecodeError, OSError):
+        doc = _get_firestore_document().get()
+    except Exception:
         return None
-    if not isinstance(payload, Mapping):
+    if not doc or not getattr(doc, "exists", False):
         return None
-    return _deserialize(payload)
+    data = doc.to_dict() or {}
+    if not isinstance(data, Mapping):
+        return None
+    return _deserialize(data)
 
 
 def save_motd(*, message: str, is_active: bool, updated_by: str | None) -> Motd:
@@ -148,17 +125,8 @@ def save_motd(*, message: str, is_active: bool, updated_by: str | None) -> Motd:
         "updated_by": (updated_by or "").strip() or None,
     }
 
-    if USE_REMOTE_MOTD:
-        document = _get_firestore_document()
-        document.set(record)
-    else:
-        serializable = {
-            "message": record["message"],
-            "is_active": record["is_active"],
-            "updated_at": record["updated_at"].isoformat(),
-            "updated_by": record["updated_by"],
-        }
-        MOTD_JSON_PATH.write_text(json.dumps(serializable, ensure_ascii=False, indent=2), encoding="utf-8")
+    document = _get_firestore_document()
+    document.set(record)
 
     clear_cache()
     return _deserialize(record)
@@ -180,6 +148,4 @@ __all__ = [
     "save_motd",
     "clear_motd",
     "clear_cache",
-    "USE_REMOTE_MOTD",
 ]
-

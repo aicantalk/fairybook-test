@@ -84,7 +84,6 @@ This guide consolidates the infrastructure steps needed to run both the reader a
 - Grant the service account `Storage Object Admin` or the minimum role needed to upload/download objects.
 - `.env` values:
   ```ini
-  STORY_STORAGE_MODE="remote"  # use "local" to skip Cloud Storage
   GCS_BUCKET_NAME="fairybook-seoul"
   GCS_PREFIX="fairybook/"        # folder/prefix inside the bucket
   ```
@@ -103,7 +102,6 @@ GCS_BUCKET_NAME="fairybook-seoul"
 GCS_PREFIX="fairybook/"
 FIRESTORE_ACTIVITY_COLLECTION="activity_logs"
 ACTIVITY_LOG_ENABLED="true"
-STORY_STORAGE_MODE="remote"
 ```
 - Both Streamlit apps load `.env` automatically, so keep the file in the repository root.
 

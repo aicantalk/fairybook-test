@@ -2,126 +2,98 @@ from __future__ import annotations
 
 import importlib
 import sys
-from types import SimpleNamespace
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 
 
-def reload_board(monkeypatch, **env):
-    for key, value in env.items():
-        if value is None:
-            monkeypatch.delenv(key, raising=False)
-        else:
-            monkeypatch.setenv(key, value)
-    sys.modules.pop("community_board", None)
-    module = importlib.import_module("community_board")
+class FakeDoc:
+    def __init__(self, doc_id: str, data: dict[str, Any]):
+        self._id = doc_id
+        self._data = data
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self._data)
+
+
+class FakeDocRef:
+    def __init__(self, collection: "FakeCollection", doc_id: str):
+        self._collection = collection
+        self._id = doc_id
+        collection.store.setdefault(self._id, {})
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    def set(self, data: dict[str, Any]) -> None:
+        self._collection.store[self._id] = dict(data)
+
+
+class FakeCollection:
+    def __init__(self) -> None:
+        self.store: dict[str, dict[str, Any]] = {}
+        self._counter = 0
+
+    def document(self) -> FakeDocRef:
+        self._counter += 1
+        doc_id = f"doc-{self._counter}"
+        return FakeDocRef(self, doc_id)
+
+    def stream(self):
+        return [FakeDoc(doc_id, data) for doc_id, data in self.store.items()]
+
+
+def _reload_board(monkeypatch, collection: FakeCollection):
+    module_name = "community_board"
+    if module_name in sys.modules:
+        sys.modules.pop(module_name)
+    module = importlib.import_module(module_name)
+    monkeypatch.setattr(module, "_get_firestore_collection", lambda: collection)
+    monkeypatch.setattr(module, "_ensure_remote_ready", lambda: None)
+    module.reset_board_storage_cache()
     return module
 
 
-def test_local_board_sqlite(tmp_path, monkeypatch):
-    module = reload_board(monkeypatch, STORY_STORAGE_MODE="local")
-    test_db = tmp_path / "board.db"
+def test_list_posts_orders_by_recent(monkeypatch):
+    collection = FakeCollection()
+    board = _reload_board(monkeypatch, collection)
 
-    module.init_board_store(db_path=test_db)
-    module.add_post(user_id="Alice", content="Hello", client_ip="1.1.1.1", db_path=test_db)
-    module.add_post(user_id="Bob", content=" 또 만나요 ", client_ip=None, db_path=test_db)
+    base = datetime(2024, 2, 1, 10, 0, tzinfo=timezone.utc)
 
-    posts = module.list_posts(limit=5, db_path=test_db)
-    assert len(posts) == 2
-    assert posts[0].user_id == "Bob"
-    assert posts[1].content == "Hello"
-    assert posts[0].client_ip is None or posts[0].client_ip == "None"
+    first_id = board.add_post(user_id="Alice", content="Hello", client_ip="1.1.1.1")
+    second_id = board.add_post(user_id="Bob", content="안녕하세요", client_ip=None)
+
+    collection.store[first_id]["created_at_utc"] = (base + timedelta(minutes=1)).isoformat()
+    collection.store[second_id]["created_at_utc"] = (base + timedelta(minutes=2)).isoformat()
+
+    posts = board.list_posts(limit=5)
+    assert [post.user_id for post in posts] == ["Bob", "Alice"]
+    assert all(post.created_at_utc.tzinfo is not None for post in posts)
 
 
-def test_remote_board_firestore(monkeypatch):
-    class FakeDocumentSnapshot:
-        def __init__(self, doc_id: str, data: dict):
-            self.id = doc_id
-            self._data = data
+def test_add_post_trims_and_limits(monkeypatch):
+    collection = FakeCollection()
+    board = _reload_board(monkeypatch, collection)
 
-        def to_dict(self) -> dict:
-            return self._data
+    with pytest.raises(ValueError):
+        board.add_post(user_id="", content="내용", client_ip=None)
 
-    class FakeBackend:
-        def __init__(self):
-            self.documents: list[tuple[str, dict]] = []
-
-    backend = FakeBackend()
-
-    class FakeDocumentRef:
-        def __init__(self, collection: "FakeCollection", doc_id: str):
-            self.collection = collection
-            self.id = doc_id
-
-        def set(self, data: dict) -> None:
-            self.collection.backend.documents.append((self.id, data))
-
-    class FakeQuery:
-        def __init__(self, backend: FakeBackend, field: str, direction: str | None):
-            self.backend = backend
-            self.field = field
-            self.direction = direction
-            self._limit: int | None = None
-
-        def limit(self, value: int) -> "FakeQuery":
-            self._limit = value
-            return self
-
-        def stream(self):
-            reverse = self.direction == FakeFirestore.Query.DESCENDING
-            sorted_docs = sorted(
-                self.backend.documents,
-                key=lambda item: item[1].get(self.field),
-                reverse=reverse,
-            )
-            if self._limit is not None:
-                sorted_docs = sorted_docs[: self._limit]
-            return [FakeDocumentSnapshot(doc_id, data) for doc_id, data in sorted_docs]
-
-    class FakeCollection:
-        def __init__(self, backend: FakeBackend):
-            self.backend = backend
-            self._counter = 0
-
-        def document(self):
-            self._counter += 1
-            return FakeDocumentRef(self, f"doc{self._counter}")
-
-        def order_by(self, field: str, direction: str | None = None) -> FakeQuery:
-            return FakeQuery(self.backend, field, direction)
-
-    class FakeClient:
-        def __init__(self, backend: FakeBackend):
-            self.backend = backend
-
-        def collection(self, name: str):  # pragma: no cover - name unused but kept for fidelity
-            return FakeCollection(self.backend)
-
-    class FakeFirestore(SimpleNamespace):
-        Query = SimpleNamespace(DESCENDING="desc")
-
-        def __init__(self, backend: FakeBackend):
-            super().__init__()
-            self.backend = backend
-
-        def Client(self, *_, **__):
-            return FakeClient(self.backend)
-
-    module = reload_board(
-        monkeypatch,
-        STORY_STORAGE_MODE="remote",
-        GCP_PROJECT_ID="test-project",
-        FIRESTORE_COLLECTION="posts",
+    long_text = "x" * 1500
+    post_id = board.add_post(
+        user_id="Charlie",
+        content=f"  {long_text}  ",
+        client_ip="127.0.0.1",
+        max_content_length=1000,
     )
 
-    fake_firestore = FakeFirestore(backend)
-    monkeypatch.setattr(module, "firestore", fake_firestore, raising=False)
-    module.reset_board_storage_cache()
-
-    module.init_board_store()
-    module.add_post(user_id="Alice", content="첫 글", client_ip="127.0.0.1")
-    module.add_post(user_id="Bob", content="둘째 글", client_ip=None)
-
-    posts = module.list_posts(limit=10)
-    assert {post.user_id for post in posts} == {"Alice", "Bob"}
-    assert posts[0].created_at_utc >= posts[1].created_at_utc
+    saved = collection.store[post_id]
+    assert saved["user_id"] == "Charlie"
+    assert saved["content"].startswith("x") and len(saved["content"]) == 1000
+    assert saved["client_ip"] == "127.0.0.1"
+    assert isinstance(saved["created_at_utc"], datetime)
