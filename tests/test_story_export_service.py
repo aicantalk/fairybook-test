@@ -60,30 +60,12 @@ def test_export_story_remote_mode(monkeypatch, sample_bundle):
     result = export_story_to_html(
         bundle=sample_bundle,
         author=None,
-        use_remote_exports=True,
     )
 
     assert upload_calls, "remote mode should upload to GCS"
     expected_suffix = upload_calls[0]
     assert result.gcs_object == f"remote/{expected_suffix}"
     assert result.gcs_url == f"https://example.com/{expected_suffix}"
-    assert Path(result.local_path).exists()
-
-
-def test_export_story_local_mode(monkeypatch, sample_bundle):
-    def fail_upload(*_args, **_kwargs):  # pragma: no cover - defensive
-        raise AssertionError("local mode must not trigger GCS uploads")
-
-    monkeypatch.setattr("services.story_service.upload_html_to_gcs", fail_upload)
-
-    result = export_story_to_html(
-        bundle=sample_bundle,
-        author="테스터",
-        use_remote_exports=False,
-    )
-
-    assert result.gcs_object is None
-    assert result.gcs_url is None
     assert Path(result.local_path).exists()
 
 
@@ -94,7 +76,6 @@ def test_export_story_includes_audio(monkeypatch, sample_bundle):
     result = export_story_to_html(
         bundle=sample_bundle,
         author="테스터",
-        use_remote_exports=False,
     )
 
     html = Path(result.local_path).read_text(encoding="utf-8")

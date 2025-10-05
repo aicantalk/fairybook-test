@@ -156,7 +156,6 @@ def export_story_to_html(
     *,
     bundle: StoryBundle,
     author: str | None = None,
-    use_remote_exports: bool = False,
 ) -> ExportResult:
     HTML_EXPORT_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -211,10 +210,9 @@ def export_story_to_html(
 
     gcs_object = None
     gcs_url = None
-    if use_remote_exports:
-        upload_result = upload_html_to_gcs(html_doc, filename)
-        if upload_result:
-            gcs_object, gcs_url = upload_result
+    upload_result = upload_html_to_gcs(html_doc, filename)
+    if upload_result:
+        gcs_object, gcs_url = upload_result
 
     return ExportResult(str(export_path), gcs_object=gcs_object, gcs_url=gcs_url)
 

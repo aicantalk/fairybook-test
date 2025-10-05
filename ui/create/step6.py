@@ -207,7 +207,6 @@ def render_step(context: CreatePageContext) -> None:
             export_result = export_story_to_html(
                 bundle=bundle,
                 author=auth_display_name(auth_user) if auth_user else None,
-                use_remote_exports=True,
             )
             session["story_export_path"] = export_result.local_path
             session["story_export_signature"] = signature
@@ -426,4 +425,3 @@ def render_step(context: CreatePageContext) -> None:
             session["mode"] = "view"
             session["step"] = 5
             st.rerun()
-

@@ -28,7 +28,9 @@ def test_export_story_to_html_smoke(tmp_path, monkeypatch):
         topic="용",
     )
 
-    result = story_service.export_story_to_html(bundle=bundle, author="작가", use_remote_exports=False)
+    monkeypatch.setattr(story_service, "upload_html_to_gcs", lambda *_, **__: None)
+
+    result = story_service.export_story_to_html(bundle=bundle, author="작가")
 
     exported = Path(result.local_path)
     assert exported.exists()
