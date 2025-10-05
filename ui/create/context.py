@@ -18,6 +18,8 @@ class CreatePageContext:
     auth_user: Mapping[str, Any] | None
     home_background: str | None
     illust_dir: str
+    generation_tokens: Mapping[str, Any] | None
+    generation_token_error: str | None
 
 
 __all__ = ["CreatePageContext"]
