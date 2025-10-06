@@ -3,6 +3,9 @@
 ## Project Structure & Module Organization
 The Streamlit interface lives in `app.py`, orchestrating stateful UI steps and calling into `gemini_client.py`. Model prompts, story metadata, and ending templates are stored in the JSON files at the repo root (`storytype.json`, `story.json`, `ending.json`, `illust_styles.json`). Illustration thumbnails sit under `illust/`; keep additions lightweight (PNG, 512×512) to preserve load time. Configuration is loaded lazily, so introduce new modules alongside existing ones and import them from `app.py` or `gemini_client.py` to ensure Streamlit reruns cleanly.
 
+A Next.js + TypeScript prototype lives in `fairybook-js/`. It reuses the shared data files and reads the root `.env` (via `next.config.ts`) so both stacks keep the same secrets. Treat the JS app as a sibling product—avoid moving Streamlit-only helpers into it, and prefer thin API wrappings that mirror the Python behaviour while staying self-contained inside `fairybook-js/`.
+See `docs/js/companion_app.md` for setup details and dev workflows specific to the JavaScript stack.
+
 The community board is an explicitly temporary sandbox feature. Keep `community_board.py` and the board-specific UI hooks in `app.py` isolated from the story-generation flow so the module can be removed or swapped without touching the rest of the app. Avoid spreading board helpers or state into other packages; if you need to expand it, add self-contained utilities alongside the existing board module.
 
 ## Build, Test, and Development Commands
@@ -15,6 +18,14 @@ streamlit run app.py
 ```
 `streamlit run app.py --server.headless true` helps when testing without a browser. Pin new dependencies in `requirements.txt` and verify `pip freeze` diffs before committing.
 
+The Next.js companion app under `fairybook-js/` expects Node.js 18+. From the repo root:
+```
+cd fairybook-js
+npm install
+npm run dev
+```
+Run `npm run build && npm start` for production checks. Keep the Python venv and `node_modules/` separate so either stack can be removed without impacting the other.
+
 ## Coding Style & Naming Conventions
 Follow PEP 8: 4-space indentation, snake_case for functions and variables, UpperCamelCase only for classes. Keep Streamlit keys stable (see `ensure_state`) and centralize constants in caps (`JSON_PATH`, `ILLUST_DIR`). Prefer f-strings, type hints, and short helper functions. Preserve existing Korean copy and emoji for UX consistency.
 
@@ -26,12 +37,14 @@ There is no automated suite yet; favor `pytest` with files named `test_*.py`. Mo
 ## Commit & Pull Request Guidelines
 Use concise, imperative commit subjects (e.g., `Refine story selection state`). Group logical changes; avoid bundling asset updates with code unless required. PRs should describe motivation, implementation notes, local verification steps, and attach UI screenshots or clips for visible changes. Link related issues and call out follow-up work so reviewers can queue next tasks.
 
+Prefix commit subjects that primarily modify `fairybook-js/` (or other Node/TypeScript assets) with `[js]` to flag reviewers that the change targets the JavaScript stack, e.g., `[js] Add Gemini proxy route`.
+
 **Agent workflow note:** Only perform `git commit` when the user explicitly requests it. Otherwise stage changes and report status without creating commits.
 
 **Conversation flow note:** When the user asks a question, respond with the answer or clarification first. Do not modify files until the user explicitly requests an edit or fix.
 
 ## Secrets & Configuration Tips
-Store `GEMINI_API_KEY` in `.env` (never commit it). Document any new environment variables in this file and add safe defaults. Large media belongs in remote storage; keep `illust/` limited to optimized PNGs so repo clones stay small. Rotate API keys immediately if they leak in logs or drafts.
+Store `GEMINI_API_KEY` in `.env` (never commit it). `fairybook-js/next.config.ts` loads the same file so the Next.js build inherits secrets without duplication. Document any new environment variables in this file and add safe defaults. Large media belongs in remote storage; keep `illust/` limited to optimized PNGs so repo clones stay small. Rotate API keys immediately if they leak in logs or drafts.
 
 ## Prompt 생성·수정 가이드
 - 프롬프트를 작성하거나 고칠 때는 이야기가 한쪽 정서에 치우치지 않도록 안내한다. 밝은 모험과 서늘한 긴장이 모두 등장할 수 있음을 명시하고, 매번 착하거나 교훈적으로 끝낼 필요가 없다고 알린다.

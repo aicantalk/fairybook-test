@@ -1,6 +1,6 @@
 # Fairybook
 
-Fairybook is a Streamlit application that helps educators and parents craft short Korean children's stories and AI-generated illustrations powered by Google Gemini. A modular Streamlit front end now orchestrates the six-step flow, locking a single illustration style after the title stage, previewing the cover art, and exporting the finished story as a lightweight HTML bundle.
+Fairybook helps educators and parents craft short Korean children's stories and AI-generated illustrations powered by Google Gemini. The canonical experience still lives in the Streamlit app (`app.py`), while a new Next.js + TypeScript prototype in `fairybook-js/` explores a web-native rewrite. Both implementations share the same prompts, assets, and `.env` secrets, so you can iterate on either stack without forking the repository.
 
 ## Core Features
 - Guided story creation: choose an age band, provide a one-line idea, and pick from randomized story archetypes.
@@ -19,6 +19,7 @@ Fairybook is a Streamlit application that helps educators and parents craft shor
 ### Prerequisites
 - Python 3.11 or newer
 - Google Gemini API access (text + image endpoints)
+- Node.js 18 LTS or newer (required for the `fairybook-js` Next.js companion app)
 
 ### Installation
 ```bash
@@ -78,6 +79,17 @@ streamlit run app.py --server.headless true
 ```
 
 The UI opens to a task selector. Choose **✏️ 동화 만들기** to start the story flow (a login prompt appears if you are not authenticated); saved stories remain publicly accessible via **📖 동화책 읽기**:
+
+### Run the Next.js Companion App
+
+The `fairybook-js/` directory hosts a TypeScript Next.js prototype that shares prompts, assets, and secrets with the Streamlit build.
+
+1. From the repo root, confirm `.env` defines `GEMINI_API_KEY` (and any other shared secrets). `next.config.ts` already loads this file.
+2. Install dependencies: `cd fairybook-js && npm install`.
+3. Launch the development server: `npm run dev` (defaults to <http://localhost:3000>). Re-run after editing environment variables.
+4. API routes under `app/api/*` can read `process.env.GEMINI_API_KEY`; prefix values with `NEXT_PUBLIC_` when they must reach the browser.
+
+Use `npm run build && npm start` for a production-like run. Keep Python (`.venv/`) and Node (`node_modules/`) environments separate so the stacks stay isolated while sharing the same repository.
 1. Pick an age group and describe the idea or theme.
 2. Choose one of eight randomized story types. Clicking **✨ 제목 만들기** runs a pre-production pipeline that drafts a synopsis, defines the protagonist, locks an illustration style, renders character concept art, and then produces the title and cover prompt.
 3. Review the generated title, synopsis, protagonist brief, character art, and cover illustration, then continue when satisfied.
@@ -155,6 +167,7 @@ The suites under `tests/` mock external services (Gemini, Firebase, and GCS) so 
 ## Further Reading
 - Technical overview: `docs/TECHNICAL_BRIEF.md`
 - Repository contribution guidelines: `AGENTS.md`
+- Next.js companion guide: `docs/js/companion_app.md`
 - Illustration style reference: `illust_styles.json`
 - Cloud configuration checklist: `docs/cloud_setup_guide.md`
 - Refactoring guidelines and plan: `docs/refactoring_guidelines.md`, `docs/refactoring_workplan.md`

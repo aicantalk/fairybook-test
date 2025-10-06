@@ -1,10 +1,34 @@
 __pycache__
+.venv/
 board.db
 .env
+.env.local
+.env.*.local
+.DS_Store
 google-credential.json
 google-credential.toml
 firebase-adminsdk.json
 firebase-adminsdk.toml
+scripts/verify_google_signin.py
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Next.js / Node
+fairybook-js/node_modules/
+fairybook-js/.next/
+fairybook-js/.turbo/
+fairybook-js/dist/
+fairybook-js/out/
+fairybook-js/.env.local
+fairybook-js/.env.*
+fairybook-js/npm-debug.log*
+fairybook-js/yarn-debug.log*
+fairybook-js/yarn-error.log*
+fairybook-js/pnpm-debug.log*
 
 
 
