@@ -41,6 +41,7 @@ npm run dev
 - Re-run `npm run dev` after editing environment variables.
 - Use `npm run build && npm start` to simulate production.
 - Run `npm run lint` to apply the default ESLint rules.
+- Run `npm run test -- --run` to execute Vitest smoke tests (single-threaded to play nicely with sandboxed environments).
 
 ### Installing Additional Packages
 Use `npm install <package>` to add runtime dependencies and `npm install -D <package>` for dev-only tooling (linters, test frameworks). Examples:

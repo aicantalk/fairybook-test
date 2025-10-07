@@ -8,6 +8,21 @@ Use this checklist when validating changes locally. Capture notes or screenshots
 - Populate `.env` with a valid `GEMINI_API_KEY`; restart Streamlit after edits.
 - (Optional) Clear `html_exports/` to simulate a first-run experience.
 
+### Next.js Prototype Setup
+- Run `cd fairybook-js && npm install` (first time only) and start the dev server with `npm run dev`.
+- Visit <http://localhost:3000> and confirm 기본 네비게이션이 `/`, `/create`, `/library`, `/board`, `/settings` 탭을 정상적으로 이동한다.
+- 기록 형식: `날짜 | 페이지 | 결과 | 비고`. Phase 1에서는 **홈/네비게이션 스모크 테스트** 1건을 남기고, 이후 페이즈에서 각 페이지별 수동 점검 기록을 추가한다.
+
+| 날짜 | 페이지 | 결과 | 비고 |
+| --- | --- | --- | --- |
+| 25-10-06 | Next.js Nav Smoke | v | Phase 1 기본 라우팅 확인 |
+| 25-10-06 | Next.js Step 1 Form | v | 나이·아이디어 입력 및 저장 메시지 확인 |
+| 25-10-06 | Next.js Step 2 Selection | v | 이야기 유형 카드 선택/Mock 제목 생성 |
+| 25-10-07 | Next.js Step 3 Review | v | 제목/시놉시스/주인공/스타일 검토 |
+| 25-10-07 | Next.js Step 4 Cards | v | Mock 카드 선택 및 단계 이동 확인 |
+| 25-10-07 | Next.js Step 5 Generation | v | 모의 스테이지 생성/상태 로그 확인 |
+| 25-10-07 | Next.js Step 6 Recap | v | 요약/내보내기 모의 흐름 점검 |
+
 ## Story Creation Flow
 1. Launch `streamlit run app.py` (headless flag permitted).
 2. On Step 0 select **✏️ 동화 만들기**.

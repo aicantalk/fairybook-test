@@ -4,7 +4,7 @@
 The Streamlit interface lives in `app.py`, orchestrating stateful UI steps and calling into `gemini_client.py`. Model prompts, story metadata, and ending templates are stored in the JSON files at the repo root (`storytype.json`, `story.json`, `ending.json`, `illust_styles.json`). Illustration thumbnails sit under `illust/`; keep additions lightweight (PNG, 512×512) to preserve load time. Configuration is loaded lazily, so introduce new modules alongside existing ones and import them from `app.py` or `gemini_client.py` to ensure Streamlit reruns cleanly.
 
 A Next.js + TypeScript prototype lives in `fairybook-js/`. It reuses the shared data files and reads the root `.env` (via `next.config.ts`) so both stacks keep the same secrets. Treat the JS app as a sibling product—avoid moving Streamlit-only helpers into it, and prefer thin API wrappings that mirror the Python behaviour while staying self-contained inside `fairybook-js/`.
-See `docs/js/companion_app.md` for setup details and dev workflows specific to the JavaScript stack.
+See `docs/js/companion_app.md` for setup details, `docs/js/architecture_decisions.md` for stack choices, `docs/js/payload_interfaces.md` for shared types, and `docs/js/app_porting_guidelines.md` with `docs/js/app_porting_tasks.md` for the Streamlit → Next.js migration plan.
 
 The community board is an explicitly temporary sandbox feature. Keep `community_board.py` and the board-specific UI hooks in `app.py` isolated from the story-generation flow so the module can be removed or swapped without touching the rest of the app. Avoid spreading board helpers or state into other packages; if you need to expand it, add self-contained utilities alongside the existing board module.
 

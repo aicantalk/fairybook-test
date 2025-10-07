@@ -168,6 +168,10 @@ The suites under `tests/` mock external services (Gemini, Firebase, and GCS) so 
 - Technical overview: `docs/TECHNICAL_BRIEF.md`
 - Repository contribution guidelines: `AGENTS.md`
 - Next.js companion guide: `docs/js/companion_app.md`
+- Next.js porting guidelines: `docs/js/app_porting_guidelines.md`
+- Next.js porting checklist: `docs/js/app_porting_tasks.md`
+- Next.js architecture decisions: `docs/js/architecture_decisions.md`
+- Next.js payload interfaces: `docs/js/payload_interfaces.md`
 - Illustration style reference: `illust_styles.json`
 - Cloud configuration checklist: `docs/cloud_setup_guide.md`
 - Refactoring guidelines and plan: `docs/refactoring_guidelines.md`, `docs/refactoring_workplan.md`
